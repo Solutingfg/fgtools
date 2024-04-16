@@ -1,0 +1,24 @@
+function ts {
+du -sk * | sort -n | awk '
+     BEGIN {
+        split("KB,MB,GB,TB", Units, ",");
+     }
+     {
+        u = 1;
+        while ($1 >= 1024) {
+           $1 = $1 / 1024;
+           u += 1
+        }
+        $1 = sprintf("%.1f %s", $1, Units[u]);
+        print $0;
+     }
+    '
+}
+
+export PATH=$PATH:/opt/shareddir/bin
+
+alias screen='screen -h 50000'
+alias sc='screen -h 50000'
+alias scls='screen -ls'
+alias scr='screen -r'
+alias scs='screen -S'

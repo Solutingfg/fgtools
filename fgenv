@@ -2,42 +2,89 @@
 
 # GENERAL
 #WORKDIR="${0%/*}" # Not working when script is not executed but sourced
-EXADATA_WORKDIR=/oracle/tmp
-VIOLET_WORKDIR=/tech/FGR
+#if [ -z "${WORKDIR}" ]
+#then
+#	[ -x "${BPCEIT_PATH}" ] && WORKDIR=${BPCEIT_PATH}
+#else
+	[ -h "${BASH_SOURCE}" ] && echo ${BASH_SOURCE} is a link && CURRENT_DIR=$(readlink ${BASH_SOURCE}) || CURRENT_DIR=${BASH_SOURCE}
+	WORKDIR=$(dirname ${CURRENT_DIR})
+	[ -d "${WORKDIR}/../bin" ] && WORKDIR=$(dirname ${WORKDIR})
+#fi
+#EXADATA_WORKDIR=/oracle/tmp
+#VIOLET_WORKDIR=/tech/FGR
+
+BINDIR=${WORKDIR}/bin
+LIBDIR=${WORKDIR}/lib
+[ $(grep -c "${BINDIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${BINDIR}:.
+[ $(grep -c "${LIBDIR}" <<< ${LD_LIBRARY_PATH}) -eq 0 ] && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${LIBDIR}
+
 ## IF EXADATA
-#[ $(hostname | grep "dbadm") ] && WORKDIR=${EXADATA_WORKDIR} && [ ! $(echo $PATH | grep $WORKDIR) ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit:${WORKDIR}/bin
-#[ -z "${WORKDIR}" ] && WORKDIR=${VIOLET_WORKDIR} && [ ! $(echo $PATH | grep $WORKDIR) ] && export PATH=$PATH:${WORKDIR}:${WORKDIR}/bin:.
 if [ $(hostname | grep "dbadm") ]
 then
-  EXADATA_ENV=1
-  WORKDIR=${EXADATA_WORKDIR}
-  export PATH=$PATH:/oracle/scripts:/oracle/exploit:${WORKDIR}/bin
+  PLATFORM=EXADATA
+  echo "Environnement ${PLATFORM}"
+  #WORKDIR=${EXADATA_WORKDIR}
+  [ $(grep -c "/oracle/scripts" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit
 else
-  WORKDIR=${VIOLET_WORKDIR}
-  export PATH=$PATH:${WORKDIR}:${WORKDIR}/bin:.
+  PLATFORM=LINUX
+  echo "Environnement VIOLET (Hors Exadata)"
+  #WORKDIR=${VIOLET_WORKDIR}
+  #export PATH=$PATH:${WORKDIR}/bin:.
+  alias fgenv=". ${LIBDIR}/fgenv"
+  [ ! -f /etc/profile.d/zz-fgenv.sh ] && [ $(id -u) -eq 0 ] && echo ln -s ${LIBDIR}/fgenv /etc/profile.d/zz-fgenv.sh
+  export LANG=C
 fi
 
-#[ -z "${WORKDIR}" ] && WORKDIR=${HOME}
-#[ -z "${WORKDIR}" ] && WORKDIR=.
-alias ls='ls --color=auto'
-alias l='ls -ail'
-alias ll='ls -al'
-alias lt='ls -altr'
-alias grep='grep --color=auto'
-alias vim='vim -u ${WORKDIR}/.vimrc'
 
 if [ -n "${DBG}" ]
 then
 echo "0=$0 1=$1 2=$2"
 env | grep FGR
+echo "which fgenv"
 which fgenv
+echo "locate fgenv"
 locate fgenv
-echo WORKDIR=$WORKDIR
+echo WORKDIR=${WORKDIR}
+echo BINDIR=${BINDIR}
+echo LIBDIR=${LIBDIR}
+sysctl net.ipv4.tcp_keepalive_time net.ipv4.tcp_keepalive_intvl net.ipv4.tcp_keepalive_probes
 fi
+
+
+alias ls='ls --color=auto'
+alias l='ls -ail'
+alias ll='ls -al'
+alias lt='ls -altr'
+alias grep='grep --color=auto'
+alias psg="ps aux | grep -v grep | grep -i"
+#alias dmesg='dmesg -H'
+alias iperf3_stop='pkill -ecnf "iperf3 -sD"'
+alias vim='vim -u ${LIBDIR}/.vimrc'
+#alias vi=vim
+alias ssh='ssh -o ServerAliveInterval=30'
+alias nmon=${BINDIR}/nmon
+alias nmon14g=${BINDIR}/nmon14g_x86_rhel7
 
 # WORKAROUND DEFAULT ENV
 # Default Shell Deconnection Timeout
 [ -n "${TMOUT}" ] && echo -e TMOUT=${TMOUT} unsetting TMOUT; unset TMOUT
+
+
+## COLOR
+function display_all_colors_16()
+{
+for clbg in {40..47} {100..107} 49 ; do
+	#Foreground
+	for clfg in {30..37} {90..97} 39 ; do
+		#Formatting
+		for attr in 0 1 2 4 5 7 ; do
+			#Print the result
+			echo -en "\e[${attr};${clbg};${clfg}m ^[${attr};${clbg};${clfg}m \e[0m"
+		done
+		echo #Newline
+	done
+done
+}
 
 # PROMPT
 # Noir 0;30
@@ -128,11 +175,12 @@ then
     export ORACLE_PATH=${WORKDIR}/sql
     # FG : alias cdoh='cd \${ORACLE_HOME}' # -bash: cd: ${ORACLE_HOME}: No such file or directory
     alias cdoh='cd ${ORACLE_HOME}'
+    alias lslsn='ps -ef | grep l[s]n'
 
     IS_RLWRAP_IN_PATH=$(which --skip-alias rlwrap >/dev/null 2>&1; echo $?)
-    IS_RLWRAP_IN_WORKDIR=$(test -x ${WORKDIR}/bin/rlwrap; echo $?)
-    [ ${IS_RLWRAP_IN_PATH} == 0 ] && RLWRAP_BIN=rlwrap || echo "rlwrap binary not present or not executable : ${WORKDIR}/bin/rlwrap"
-    [ ${IS_RLWRAP_IN_WORKDIR} == 0 ] && RLWRAP_BIN=${WORKDIR}/bin/rlwrap && [ -d ${WORKDIR}/.rlwrap ] && RLWRAP_DIR=${WORKDIR}/.rlwrap
+    IS_RLWRAP_IN_WORKDIR=$(test -x ${BINDIR}/rlwrap; echo $?)
+    [ ${IS_RLWRAP_IN_PATH} == 0 ] && RLWRAP_BIN=rlwrap || echo "rlwrap binary not present or not executable : ${BINDIR}/rlwrap"
+    [ ${IS_RLWRAP_IN_WORKDIR} == 0 ] && RLWRAP_BIN=${BINDIR}/rlwrap && [ -d ${LIBDIR}/.rlwrap ] && RLWRAP_DIR=${LIBDIR}/.rlwrap
     #[ -z "${RLWRAP_BIN}" ] && RLWRAP_BIN=$(locate -be '\rlwrap')
     #[ -z "${RLWRAP_DIR}" ] && RLWRAP_DIR=$(locate -be '\.rlwrap')
     IS_RLWRAP_PREREQ_OK=$(${RLWRAP_BIN} -v >/dev/null 2>&1; echo $?)
@@ -142,21 +190,30 @@ then
       alias rlsqlplus='rlwrap -f ${RLWRAP_DIR}/sqlplus_completions sqlplus'
       alias rlrman='rlwrap -f ${RLWRAP_DIR}/rman_completions rman'
       alias rldgmgrl='rlwrap -f ${RLWRAP_DIR}/dgmgrl_completions dgmgrl'
-      alias rlsql='rlwrap -f ${RLWRAP_DIR}/sqlplus_completions sqlplus / as sysdba @ login'
+      alias rlasmcmd='rlwrap -f ${RLWRAP_DIR}/asmcmd_completions asmcmd'
+      alias rladrci='rlwrap -f ${RLWRAP_DIR}/adrci_completions adrci'
+      alias rllsn='rlwrap -f ${RLWRAP_DIR}/lsnrctl_completions lsnrctl'
+      alias rlsql='rlwrap -f ${RLWRAP_DIR}/sqlplus_completions sqlplus / as sysdba @ login_noauto'
       alias sql='rlsql'
-      alias rmn='rlwrap -f ${RLWRAP_DIR}/rman_completions rman target /'
-      alias dgb='rlwrap -f ${RLWRAP_DIR}/dgmgrl_completions dgmgrl /'
+      alias rmn='rlrman target /'
+      alias dgb='rldgmgrl /'
+      alias asm='rlasmcmd'
+      alias adr='rladrci'
+      alias lsn='rllsn'
     else
-      alias sql='sqlplus / as sysdba @ login'
+      alias sql='sqlplus / as sysdba @ login_noauto'
     fi
 fi
 
+alias setoh='. ${LIBDIR}/setoh.sh'
+alias env11='. ${LIBDIR}/env11.sh'
+alias env12='. ${LIBDIR}/env12.sh'
 
-alias env11='. ${WORKDIR}/env11.sh'
-alias env12='. ${WORKDIR}/env12.sh'
+## COMMON
+alias fgdbg='bash -xc '\''echo "0:$0 ; 0-modded:${0#bash} ; 1:$1"'\'''
+alias netbreakdown="netstat -nat | awk '{print $6}' | sort | uniq -c | sort -n"
 
-
-# SCREEN
+## SCREEN
 # To avoid error : screen Cannot open your terminal '/dev/pts/0' - please check.
 #script /dev/null => bash -c '\''script /dev/null -q -c
 
@@ -171,9 +228,8 @@ alias scrd='bash -c '\''script /dev/null -q -c "screen -rd ${0#bash}"'\'''
 alias scx='bash -c '\''script /dev/null -q -c "screen -x ${0#bash}"'\'''
 alias scrx='bash -c '\''script /dev/null -q -c "screen -rx ${0#bash}"'\'''
 alias scs='bash -c '\''script /dev/null -q -c "screen -h 50000 -S ${0#bash}"'\'''
-alias fgdbg='bash -xc '\''echo "0:$0 ; 0-modded:${0#bash} ; 1:$1"'\'''
 
-export SCREENRC=${WORKDIR}/.screenrc
+export SCREENRC=${LIBDIR}/.screenrc
 # .screenrc
 # Enable mouse scroll
 #termcapinfo xterm* ti@:te@
@@ -203,6 +259,25 @@ ARG1=${1:-*}
 du -sk ./${ARG1} | /usr/bin/sort -n | /usr/bin/awk 'BEGIN{ pref[1]="K"; pref[2]="M"; pref[3]="G";} { total = total + $1; x = $1; y = 1; while( x > 1024 ) { x = (x + 1023)/1024; y++; } printf("%g%s\t%s\n",int(x*10)/10,pref[y],$2); } END { y = 1; while( total > 1024 ) { total = (total + 1023)/1024; y++; } printf("Total: %g%s\n",int(total*10)/10,pref[y]); }'
 }
 
+
+function ts_old {
+du -sk * | sort -n | awk '
+     BEGIN {
+        split("KB,MB,GB,TB,PB,EB,ZB,YB", Units, ",");
+     }
+     {
+        u = 1;
+        while ($1 >= 1024) {
+           $1 = $1 / 1024;
+           u += 1
+        }
+        $1 = sprintf("%.1f %s", $1, Units[u]);
+        print $0;
+     }
+    '
+}
+
+
 function ts () {
 [ -n "$1" ] && filter="$*" || filter="*"
 du -sk ${filter} | sort -n | awk '
@@ -217,7 +292,14 @@ du -sk ${filter} | sort -n | awk '
         u += 1
       }
       $1 = sprintf("%.1f %s", $1, Units[u]);
-      print $0;
+      #$3 = system("bash -c '\''stat -c %y "$2"'\''");
+      #fdate = system("stat -c %y " $2);
+      fdate_cmd="stat -c %y "$2" | cut -d. -f1"
+      if (Units[u] != "KB") {fdate_cmd | getline fdate; close(fdate_cmd);} #else {fdate=""}
+      #print $0
+      #print $1" "fdate"   "$2
+      print $0"   "fdate
+      #printf("%.1f %s %s %s\n", $1, Units[u], fdate, $2);
     }
     END {
       u = 1;
@@ -229,6 +311,32 @@ du -sk ${filter} | sort -n | awk '
     }
 '
 }
+
+
+function oralisthome () {
+printf "%6s %-20s %-80s\n" "PID" "NAME" "ORACLE_HOME"
+pgrep -af _pmon_ |
+  while read pid pname  y ; do
+    printf "%6s %-20s %-80s\n" $pid $pname `ls -l /proc/$pid/exe | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//' | sort | uniq`
+  done
+}
+
+
+function highlight() {
+	declare -A fg_color_map
+	fg_color_map[black]=30
+	fg_color_map[red]=31
+	fg_color_map[green]=32
+	fg_color_map[yellow]=33
+	fg_color_map[blue]=34
+	fg_color_map[magenta]=35
+	fg_color_map[cyan]=36
+
+	fg_c=$(echo -e "\e[1;${fg_color_map[$1]}m")
+	c_rs=$'\e[0m'
+	sed -u s"/$2/$fg_c\0$c_rs/g"
+}
+
 
 pathmunge () {
     case ":${PATH}:" in
@@ -246,7 +354,7 @@ pathmunge () {
 
 # BASH COMPLETION
 # .inputrc
-#bind 'set completion-query-items 300'
+bind 'set completion-query-items 300'
 #bind 'set print-completions-horizontally off'
 #set rl_completion_query_items 1000
 
@@ -276,12 +384,23 @@ _oraenv_completion() {
     [[ -f /etc/oratab ]] || return 0
 
     local cur="${COMP_WORDS[COMP_CWORD]}"
-    word_list=$(cat /etc/oratab | cut -d':' -f1 | grep -v '#')
-    #word_list=$(grep -v -e "^#\|^ \|^$" /etc/oratab | cut -f1 -d: | paste -sd " " -)
+    #word_list=$(cat /etc/oratab | cut -d':' -f1 | grep -v '#')
+    #word_list=$(crsctl status resource -w "TYPE = ora.database.type" -p|grep USR_ORA_INST_NAME|sed "s:.*=::"|sort -u)
+    word_list=$(grep -v -e "^#\|^ \|^$" /etc/oratab | cut -f1 -d: | paste -sd " " -)
     COMPREPLY=( $(compgen -W "${word_list}" -- ${cur}) )
 }
 
 complete -F _oraenv_completion oenv srvctl sql.sh dgmgrl.sh rman.sh rman_backup.sh rman_config.sh rman_config_to_tape.sh status_instance.sh status_backup.sh
+
+
+_listener_completion() {
+    COMPREPLY=()
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    word_list=$(ps -eo "cmd" | grep l[s]n | cut -d' ' -f2 | paste -sd " " -)
+    COMPREPLY=( $(compgen -W "${word_list}" -- ${cur}) )
+}
+
+complete -F _listener_completion lsnrctl lsn
 
 
 _example_complete()
@@ -314,3 +433,4 @@ _example_complete()
 
 # Register _example_complete to provide completion for the following commands
 complete -F _example_complete oraup
+

@@ -1,3 +1,12 @@
+# GENERAL
+#WORKDIR="${0%/*}" # Not working when script is not executed but sourced
+#WORKDIR=/oracle/FGR
+[ -n ${WORKDIR} ] && WORKDIR=${HOME}
+alias ls='ls --color=auto'
+alias l='ls -ail'
+alias ll='ls -al'
+alias lt='ls -altr'
+alias grep='grep --color=auto'
 
 if [ -n "${DBG}" ]
 then
@@ -9,17 +18,11 @@ WORKDIR="${1%/*}"
 echo WORKDIR=$WORKDIR
 fi
 
-# GENERAL
-#WORKDIR="${0%/*}" # Not working when script is not executed but sourced
-WORKDIR=/oracle/FGR
-alias ls='ls --color=auto'
-alias l='ls -ail'
-alias ll='ls -al'
-alias lt='ls -altr'
-alias grep='grep --color=auto'
-
 # PATH
-[ ! $(echo $PATH | grep FGR) ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit:${WORKDIR}:${WORKDIR}/bin:.
+## IF EXADATA
+[ $(hostname | grep "dbadm") ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit:/oracle/FGR/bin
+
+[ ! $(echo $PATH | grep \$WORKDIR) ] && export PATH=$PATH:${WORKDIR}:${WORKDIR}/bin:.
 
 # WORKAROUND DEFAULT ENV
 # Default Shell Deconnection Timeout
@@ -95,13 +98,19 @@ esac
 #export NLS_LANG=AMERICAN_AMERICA.WE8MSWIN1252
 export NLS_LANG=AMERICAN_AMERICA.US7ASCII
 export NLS_DATE_FORMAT='DD-MON-YY HH24:MI:SS';
+## FG : Windows=SQLPATH + @ login OR Unix=ORACLE_PATH (Doc ID 2241021.1)
+#export SQLPATH=/oracle/tmp
+export ORACLE_PATH=/oracle/tmp
 #export PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
-alias sql='sqlplus / as sysdba'
+#alias sql='sqlplus / as sysdba @ login'
+alias sql='rlsql'
 alias cdoh='cd \${ORACLE_HOME}'
-alias rlsqlplus='rlwrap -f ~/.rlwrap/sqlplus_completions sqlplus'
-alias rlrman='rlwrap -f ~/.rlwrap/rman_completions rman'
-alias rldgmgrl='rlwrap -f ~/.rlwrap/dgmgrl_completions dgmgrl'
-alias rlsql='rlwrap -f ~/.rlwrap/sqlplus_completions sqlplus / as sysdba'
+RLWRAP_DIR=/oracle/bin/.rlwrap
+alias rlwrap='/oracle/bin/rlwrap'
+alias rlsqlplus='rlwrap -f ${RLWRAP_DIR}/sqlplus_completions sqlplus'
+alias rlrman='rlwrap -f ${RLWRAP_DIR}/rman_completions rman'
+alias rldgmgrl='rlwrap -f ${RLWRAP_DIR}/dgmgrl_completions dgmgrl'
+alias rlsql='rlwrap -f ${RLWRAP_DIR}/sqlplus_completions sqlplus / as sysdba'
 alias env11='. ${WORKDIR}/env11.sh'
 alias env12='. ${WORKDIR}/env12.sh'
 
@@ -118,6 +127,7 @@ alias scs='screen -S'
 # Workaround when not connected as root : "Cannot open your terminal '/dev/pts/0' - please check."
 alias scr='bash -c '\''script /dev/null -q -c "screen -r ${0#bash}"'\'''
 alias scrd='bash -c '\''script /dev/null -q -c "screen -rd ${0#bash}"'\'''
+alias scx='bash -c '\''script /dev/null -q -c "screen -x ${0#bash}"'\'''
 alias scrx='bash -c '\''script /dev/null -q -c "screen -rx ${0#bash}"'\'''
 alias scs='bash -c '\''script /dev/null -q -c "screen -h 50000 -S ${0#bash}"'\'''
 alias fgdbg='bash -xc '\''echo "0:$0 ; 0-modded:${0#bash} ; 1:$1"'\'''

@@ -24,6 +24,12 @@ LIBDIR=${WORKDIR}/lib
 [ $(grep -c "${WORKDIR}" <<< ${MANPATH}) -eq 0 ] && export MANPATH="$(manpath -g):${WORKDIR}/usr/share/man"
 
 
+#SCRIPT_DIR=${TOOLKIT_BIN:-/oracle/exploit}
+#[ -x /prsyslib/toolunix/bin ] && SCRIPT_DIR=/prsyslib/toolunix/bin
+#[ -x /oracle/exploit ] && SCRIPT_DIR=/oracle/exploit
+SCRIPT_DIR=${TOOLKIT_BIN:-$(dirname $(which --skip-alias ora_functions.sh &>/dev/null) &>/dev/null)}
+
+
 ## IF EXADATA
 if [ $(hostname | grep "dbadm") ]; then
   PLATFORM=EXADATA
@@ -36,9 +42,6 @@ else
   alias fgenv=". ${LIBDIR}/fgenv"
   [ ! -f /etc/profile.d/zz-fgenv.sh ] && [ $(id -u) -eq 0 ] && echo ln -s ${LIBDIR}/fgenv /etc/profile.d/zz-fgenv.sh
   export LANG=C
-fi
-
-
 fi
 
 
@@ -85,19 +88,23 @@ fi
 
 ## HighLight Color
 case $(hostname --fqdn | cut -d'.' -f2- | tr '[:upper:]' '[:lower:]') in
-    *prdres)  echo "Environnement : PRD"
+    *prdres)  WELCOME_MSG+="\nEnvironnement : PRD"
         HL_COLOR=';41'
         HL_COLOR2=';47'
     ;;
-    *intres)  WELCOME_MSG="${WELCOME_MSG}\nEnvironnement : HPR (INT)"
+    *intres)  WELCOME_MSG+="\nEnvironnement : HPR (INT)"
         HL_COLOR=
         HL_COLOR2=
     ;;
-    *mapres)  WELCOME_MSG="${WELCOME_MSG}\nEnvironnement : HPR (MAP)"
+    *mapres)  WELCOME_MSG+="\nEnvironnement : HPR (MAP)"
         HL_COLOR=
         HL_COLOR2=
     ;;
 esac
+
+
+## BPCE-IT Specific
+
 
 ## Screen flag
 #[ "${TERM}" = "screen" ] && SCREEN_FLAG=" screen:${STY#*.}" || unset SCREEN_FLAG
@@ -164,6 +171,7 @@ done
 ## ORACLE
 if [ "${LOGNAME}" == "oracle" -o "${LOGNAME}" == "grid" ]
 then
+    GI_HOME=$(dirname $(ps -eo args | grep [o]cssd.bin) | awk '{print substr( $1, 1, length($1)-4)}')
     #.oracle_profile
     #export PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
     #export NLS_LANG=AMERICAN_AMERICA.WE8MSWIN1252
@@ -176,6 +184,8 @@ then
     # FG : alias cdoh='cd \${ORACLE_HOME}' # -bash: cd: ${ORACLE_HOME}: No such file or directory
     alias cdoh='cd ${ORACLE_HOME}'
     alias lslsn='ps -ef | grep l[s]n'
+    [ -f "${ORACLE_HOME}/suptools/oratop/oratop" ] && ORATOP_PATH=${ORACLE_HOME}/suptools/oratop || ORATOP_PATH=${BPCEIT_PATH}/bin
+    alias oratop="${ORATOP_PATH}/oratop -f -r / as sysdba"
 
     IS_RLWRAP_IN_PATH=$(which --skip-alias rlwrap >/dev/null 2>&1; echo $?)
     IS_RLWRAP_IN_WORKDIR=$(test -x ${BINDIR}/rlwrap; echo $?)
@@ -186,33 +196,39 @@ then
     IS_RLWRAP_PREREQ_OK=$(${RLWRAP_BIN} -v >/dev/null 2>&1; echo $?)
     if [ -n "${RLWRAP_BIN}" -a -n "${RLWRAP_DIR}" -a ${IS_RLWRAP_PREREQ_OK} -eq 0 ]
     then
-      alias rlwrap=${RLWRAP_BIN}
+      alias rlwrap="${RLWRAP_BIN} --histsize 5000"
       alias rlsqlplus='rlwrap -f ${RLWRAP_DIR}/sqlplus_completions sqlplus'
       alias rlrman='rlwrap -f ${RLWRAP_DIR}/rman_completions rman'
       alias rldgmgrl='rlwrap -f ${RLWRAP_DIR}/dgmgrl_completions dgmgrl'
       alias rlasmcmd='rlwrap -f ${RLWRAP_DIR}/asmcmd_completions asmcmd'
+      alias rlasmcmdora='ORACLE_HOME=${GI_HOME} rlwrap -f ${RLWRAP_DIR}/asmcmd_completions asmcmd --privilege sysdba'
       alias rladrci='rlwrap -f ${RLWRAP_DIR}/adrci_completions adrci'
       alias rllsn='rlwrap -f ${RLWRAP_DIR}/lsnrctl_completions lsnrctl'
-      alias rlsql='rlwrap -f ${RLWRAP_DIR}/sqlplus_completions sqlplus / as sysdba @ login_noauto'
+      alias rlsql='rlwrap -f ${RLWRAP_DIR}/sqlplus_completions sqlplus / as sysdba @ login_noauto ${COLUMNS}'
+      alias rlsqlasm='rlwrap -f ${RLWRAP_DIR}/sqlplus_completions sqlplus / as sysasm @ login_noauto ${COLUMNS}'
       alias sql='rlsql'
+      alias sqlasm='rlsqlasm'
       alias rmn='rlrman target /'
       alias dgb='rldgmgrl /'
       alias asm='rlasmcmd'
+      alias asmora='rlasmcmdora'
+      [ "${LOGNAME}" == "oracle" ] && alias asm='rlasmcmdora'
       alias adr='rladrci'
       alias lsn='rllsn'
     else
-      alias sql='sqlplus / as sysdba @ login_noauto'
+      alias sql='sqlplus / as sysdba @ login_noauto ${COLUMNS}'
     fi
 fi
 
 alias setoh='. ${LIBDIR}/setoh.sh'
 alias env11='. ${LIBDIR}/env11.sh'
 alias env12='. ${LIBDIR}/env12.sh'
+[ -n "${ORACLE_HOME}" ] && alias opatch='${ORACLE_HOME}/OPatch/opatch'
 
 
 function loopdb(){
   set +x
-  local DB_FILTER VERBOSE=0 DEBUG SQL_COLLECTION HEADER DEFINED_HEADER
+  local DB_FILTER ORAVERFILTER VERBOSE=0 DEBUG SQL_COLLECTION HEADER DEFINED_HEADER OPEN_ONLY TIMING
   SQL_COLLECTION=${1} ; shift 1
 
   function Usage() {
@@ -223,7 +239,10 @@ function loopdb(){
   Options: 
   -d    <INSTANCE_NAME>  : Filter INSTANCE_NAME or pattern (eg -d ALF)
   --ver <ORACLE_VERSION> : 11.2|12|19.4
+  --open                 : Display OPEN database only
+  --timing               : Execution timing
   -v                     : Verbose enable
+  -vv                    : More verbosity
   -dbg                   : Debug enable 
   "
   }
@@ -236,28 +255,21 @@ function loopdb(){
     #echo argv=$1
     case "$1" in
       -h*)  Usage ; return 1 ;;
-    --ver|-o)  ORAVERFILTER=$2 ; if [ "$2" = "" ]; then Usage ; return 1 ; else shift 2 ; fi ;;
-       -d)  DB_FILTER=".*$2.*" ; if [ "$2" = "" ]; then Usage ; return 1 ; else shift 2 ; fi ;;
+      -d)  DB_FILTER=".*$2.*" ; if [ "$2" = "" ]; then Usage ; return 1 ; else shift 2 ; fi ;;
+      --ver|-o)  ORAVERFILTER=$2 ; if [ "$2" = "" ]; then Usage ; return 1 ; else shift 2 ; fi ;;
+      --open)  OPEN_ONLY=1 ; shift 1 ;;
+      --timing) TIMING=1 ; shift 1 ;;
       -v)  VERBOSE=1 ; shift 1 ;;
       -vv)  VERBOSE=2 ; shift 1 ;;
-      --debug|-dbg) DEBUG=YES ;  shift 1 ;;
-       -*)  echo "!!! Argument $1 invalide !!!"; Usage ; return 1 ;;
-        *)  echo "!!! Argument $1 invalide !!!"; Usage ; return 1 ;;
+      -dbg|--debug) DEBUG=YES ;  shift 1 ;;
+      -*)  echo "!!! Argument $1 invalide !!!"; Usage ; return 1 ;;
+      *)  echo "!!! Argument $1 invalide !!!"; Usage ; return 1 ;;
       #-exemple_1)   export EX=YES ; shift 1 ;;
       #-exemple_2*)  export EX=$2 ;  if [ "$2" = "" ]; then Usage ; else shift 2 ; fi ;;
       #-exemple_3)   EX=$2 ; [ -z "$2" ] && Usage || shift 2 ;;
       #--name=*) name="${1#*=}"; shift 1;;
     esac
   done
-
-function SQL_PROCESS() {
-echo $1
-SQL=$(cat <<-\EOF
-echo -e $1
-EOF
-)
-echo SQL=$SQL
-}
 
 ## Replace occurrences of $ with \$ to prevent variable substitution:
 # filename="${filename//$/\\$}"
@@ -269,6 +281,7 @@ echo SQL=$SQL
 
   SQL_PARAM="WHENEVER SQLERROR EXIT SQL.SQLCODE\nset head off feed off verify off echo off pages 0 trimout on trimspool on termout off wrap off set feed only\n"
   SQL_PARAM="WHENEVER SQLERROR EXIT SQL.SQLCODE\nset head off lines $[${COLUMNS}-${COLUMNS}/3] pages 0 trimout on\n"
+  [ -n "${TIMING}" ] && SQL_PARAM+="set timing on\n"
 
   #ENVSQL="${ENVSQL}"
     #ENVSQL_HEADER="CPU_COUNT"
@@ -276,10 +289,12 @@ echo SQL=$SQL
   DBID='select dbid from v$database;'
   DBPSU11="SELECT TO_CHAR(action_time, 'YYYY-MM-DD HH24:MI:SS') AS action_time,action,version,id,comments FROM sys.dba_registry_history where comments like 'BP%' ORDER by action_time asc;"
   DBPSU12="SELECT TO_CHAR(action_time, 'YYYY-MM-DD HH24:MI:SS') AS action_time,action,status,description,version FROM sys.dba_registry_sqlpatch where description like '%PSU%' ORDER by action_time;"
-  DBPSUVER=DBPSU${ORAVER}; DBPSU=${!DBPSUVER}
   DIRECTORIES="col OWNER for a10\ncol DIRECTORY_NAME for a25\ncol DIRECTORY_PATH for a70\nselect OWNER,DIRECTORY_NAME,DIRECTORY_PATH from dba_directories where DIRECTORY_NAME like '%PUMP%';"
   HEATMAP="col owner for a10\ncol SEGMENT_NAME for a20\nSELECT owner, segment_name, segment_type, SUM(bytes/1048576) seg_size FROM dba_extents WHERE tablespace_name='SYSAUX' AND SEGMENT_NAME = 'HEATMAP' GROUP BY owner,segment_name , segment_type;"
   STARTUP_TIME="select STARTUP_TIME from v\$instance;"
+  DB_ROLE="select DATABASE_ROLE from v\$database;"
+  DB_OPEN_MODE="select OPEN_MODE from v\$database;"
+  INSTANCE_STATUS="select STATUS from v\$instance;"
   IS_DTG="show parameter dg_broker_start"
   IS_RAC="select VALUE from v\$parameter where upper(NAME) = 'CLUSTER_DATABASE_INSTANCES';"
   IS_RAC="select count(*) NBR_INSTANCES from gv\$instance;"
@@ -299,36 +314,45 @@ echo SQL=$SQL
   SGA_DBF_USAGE="COLUMN SGA_USAGE FORMAT A40
   SELECT
   'SGA_TARGET         GB : '||SGA_TARGET_GB
---  ||chr(10)||'Pool               GB : '||POOL_USED_GB
---  ||chr(10)||'Shared Pool        GB : '||SHARED_POOL_GB
+  ||chr(10)||'All Pool Used      GB : '||POOL_USED_GB
+  ||chr(10)||'Shared Pool Alloc  GB : '||SHARED_POOL_GB
   ||chr(10)||'Shared Pool Used   GB : '||SHARED_POOL_USED_GB
---  ||chr(10)||'Buffer Cache       GB : '||BUFFER_CACHE_GB
+  ||chr(10)||'Shared Pool Free   GB : '||SHARED_POOL_FREE_GB
+  ||chr(10)||'Buffer Cache Alloc GB : '||BUFFER_CACHE_GB
   ||chr(10)||'Buffer Cache Used  GB : '||BUFFER_CACHE_USED_GB
-  ||chr(10)||'SGA_FREE           GB : '||(SGA_TARGET_GB-BUFFER_CACHE_USED_GB-SHARED_POOL_USED_GB)
-  ||chr(10)||'SGA_FREE_PERCENT    % : '||round(((SGA_TARGET_GB-BUFFER_CACHE_USED_GB-SHARED_POOL_USED_GB)*100/SGA_TARGET_GB),1)
+  ||chr(10)||'Other Pool Alloc   GB : '||OTHER_POOL_GB
+  ||chr(10)||'Other Pool Used    GB : '||OTHER_POOL_USED_GB
+  ||chr(10)||'Other Pool Free    GB : '||OTHER_POOL_FREE_GB
+  ||chr(10)||'SGA_USED           GB : '||round((SHARED_POOL_USED_GB+BUFFER_CACHE_USED_GB+OTHER_POOL_USED_GB),1)
+  ||chr(10)||'SGA_FREE           GB : '||round((SGA_TARGET_GB-BUFFER_CACHE_USED_GB-SHARED_POOL_USED_GB-OTHER_POOL_USED_GB),1)
+  ||chr(10)||'SGA_FREE_PERCENT    % : '||round(((SGA_TARGET_GB-BUFFER_CACHE_USED_GB-SHARED_POOL_USED_GB-OTHER_POOL_USED_GB)*100/SGA_TARGET_GB),1)
   ||chr(10)||'DBF_SIZE           GB : '||DBF_SIZE_GB
---  ||chr(10)||'DBF_SIZE_FREE      GB : '||DBF_SIZE_FREE_GB
+  ||chr(10)||'DBF_SIZE_FREE      GB : '||DBF_SIZE_FREE_GB
   ||chr(10)||'DBF_SIZE_USED      GB : '||(DBF_SIZE_GB - DBF_SIZE_FREE_GB)
     FROM
-    (
-    SELECT round(sum(number_of_blocks*db_block_size/1073741824),1) BUFFER_CACHE_USED_GB
-    , SGA_TARGET_GB
-    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool like '%pool%') POOL_USED_GB
-    ,(select round(bytes/1073741824,1) GB from v\$sgainfo where name='Shared Pool Size') SHARED_POOL_GB
-    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool ='shared pool') SHARED_POOL_USED_GB
+    (SELECT round(sum(number_of_blocks*db_block_size/1073741824),1) BUFFER_CACHE_USED_GB
     ,(select round(bytes/1073741824,1) from v\$sgastat where name = 'buffer_cache') BUFFER_CACHE_GB
---    ,(select round(sum(df.bytes/1073741824),0) from v\$datafile df, v\$tablespace ts where df.ts#=ts.ts# and ts.NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS')) DBF_SIZE_GB
+    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool like '%pool%') POOL_USED_GB
+    ,(select round(bytes/1073741824,1) GB from v\$sgainfo where name = 'Shared Pool Size') SHARED_POOL_GB
+    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool = 'shared pool' and name != 'free memory') SHARED_POOL_USED_GB
+    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool = 'shared pool' and name = 'free memory') SHARED_POOL_FREE_GB
+    ,(select round(sum(bytes/1073741824),1) GB from v\$sgainfo where lower(name) like '%pool%' and name != 'Shared Pool Size') OTHER_POOL_GB
+    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool like '%pool%' and pool != 'shared pool' and name != 'free memory') OTHER_POOL_USED_GB
+    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool like '%pool%' and pool != 'shared pool' and name = 'free memory') OTHER_POOL_FREE_GB
+--#    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool like '%pool%' and pool in ('large pool','streams pool','numa pool') and name != 'free memory') OTHER_POOL_USED_GB
+--#    ,(select round(sum(df.bytes/1073741824),0) from v\$datafile df, v\$tablespace ts where df.ts#=ts.ts# and ts.NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS')) DBF_SIZE_GB
     ,(select round(sum(bytes/1073741824),0) from dba_data_files where TABLESPACE_NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS')) DBF_SIZE_GB
---    ,(select round(sum(user_bytes/1073741824),0) from dba_data_files where TABLESPACE_NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS')) DBF_SIZE_GB
+--#    ,(select round(sum(user_bytes/1073741824),0) from dba_data_files where TABLESPACE_NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS')) DBF_SIZE_GB
     ,(select round(sum(bytes/1073741824),0) from dba_free_space where TABLESPACE_NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS')) DBF_SIZE_FREE_GB
+    ,SGA_TARGET_GB
       FROM
       (
       SELECT o.object_name, COUNT(*) number_of_blocks
       ,(SELECT value FROM V\$PARAMETER WHERE name = 'db_block_size') db_block_size
-    ,(select round(value/1073741824,1) GB from v\$parameter where name='sga_target') SGA_TARGET_GB
-        FROM DBA_OBJECTS o, V\$BH bh
+      ,(select round(value/1073741824,1) GB from v\$parameter where name='sga_target') SGA_TARGET_GB
+       FROM DBA_OBJECTS o, V\$BH bh
        WHERE o.data_object_id = bh.OBJD
-         AND o.owner != 'SYS'
+       AND o.owner != 'SYS'
        GROUP BY o.object_Name
        --ORDER BY COUNT(*)
       )
@@ -357,11 +381,13 @@ echo SQL=$SQL
   for SID in $(ps -eo args | grep pm[o]n_"${DB_FILTER}" | cut -d'_' -f3- | grep -v "^+\|^-\|^$\|^DBA" | sort); do . oraenv <<<${SID}>/dev/null
     ORA_VERSION=$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER")
     [ ! -z "${ORAVERFILTER}" ] && [[ ! ${ORA_VERSION} =~ ${ORAVERFILTER} ]] && continue
+    [ "${OPEN_ONLY}" = 1 ] && [ $(echo -e "${INSTANCE_STATUS}" | sqlplus -S / as sysdba | grep -c 'OPEN') -eq 0 ] && continue 
     (( ${VERBOSE} >= 1 )) && echo -e "\n${COLOR_TITLE}${ORACLE_SID} : ${ORA_VERSION}${COLOR_STD}" # : ${COLOR_CMD}${QUERYRAW//\\n/ & }${COLOR_STD}"
     QUERY_OUTPUT=$(echo -e "${QUERY2EXEC}" | sqlplus -S / as sysdba)
     [[ "${QUERY_OUTPUT}" =~ ORA-|TNS-|RMAN-|-bash|KO ]] && OUTCOLOR=${COLOR_KO} || OUTCOLOR=${COLOR_STD}
     [[ "${QUERY_OUTPUT}" =~ "OK" ]] && OUTCOLOR=${COLOR_OK}
-    (( ${VERBOSE} == 0 )) && echo "${ORACLE_SID}${pad_space:0:$((${pad_size}-${#ORACLE_SID}))} (${ORA_VERSION}) : ${HEADER} : ${QUERY_OUTPUT}"
+    #(( ${VERBOSE} == 0 )) && echo "${ORACLE_SID}${pad_space:0:$((${pad_size}-${#ORACLE_SID}))} (${ORA_VERSION}) : ${HEADER} : ${QUERY_OUTPUT}"
+    (( ${VERBOSE} == 0 )) && (set -f; echo "${ORACLE_SID}${pad_space:0:$((${pad_size}-${#ORACLE_SID}))} (${ORA_VERSION}) : ${HEADER} : $(echo ${QUERY_OUTPUT})"; set +f);
     (( ${VERBOSE} >= 1 )) && echo -e "${COLOR_RESULT}${HEADER}${COLOR_STD}"
     (( ${VERBOSE} == 1 )) && (set -f; echo -e "${OUTCOLOR:-${COLOR_RESULT}}$(echo ${QUERY_OUTPUT})${COLOR_STD}"; set +f);
     (( ${VERBOSE} >= 2 )) && echo -e "${OUTCOLOR}${QUERY_OUTPUT}${COLOR_STD}"
@@ -370,11 +396,114 @@ echo SQL=$SQL
 
   [ ! -z "${DEBUG}" ] && PROMPT_COMMAND=$PROMPT_COMMAND_PREV && set +x
 }
-    [[ -z "${VERBOSE}" ]] && echo -e "${COLOR_RESULT}${HEADER}${COLOR_STD}"
-    [[ "${VERBOSE}" == "YES" ]] && echo -e "${COLOR_RESULT}${HEADER}${COLOR_STD}"
+
+
+
+
+function loopdb_tmp(){
+  unset DB_FILTER VERBOSE DEBUG LOOP_TIMER
+  SQL_COLLECTION=${1} ; shift 1
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h*)  Usage ; return 1 ;;
+      -d)  DB_FILTER=".*$2.*" ; if [ "$2" = "" ]; then Usage ; return 1 ; else shift 2 ; fi ;;
+      -t)  LOOP_TIMER="$2" ; if [ "$2" = "" ]; then Usage ; return 1 ; else shift 2 ; fi ;;
+      -v*)  VERBOSE=YES ; shift 1 ;;
+      --debug|-dbg) DEBUG=YES ;  shift 1 ;;
+       -*)  echo "!!! Argument $1 invalide !!!"; Usage ; return 1 ;;
+        *)  echo "!!! Argument $1 invalide !!!"; Usage ; return 1 ;;
+    esac
+  done
+
+  COLOR_OK='\033[30;42m'; COLOR_KO="\033[1;37;41m"; COLOR_WARN="\033[30;43m"; COLOR_CMD="\033[1;37;44m"; COLOR_STD="\033[0;0m"; COLOR_TITLE="\033[30;47m"; COLOR_RESULT="\033[30;46m"
+  unset COLOR_OK COLOR_KO COLOR_WARN COLOR_CMD COLOR_STD COLOR_TITLE COLOR_RESULT
+  DATE=$(date "+%Y-%m-%d_%H:%M:%S")
+  SQL_PARAM="WHENEVER SQLERROR EXIT SQL.SQLCODE\nset head off lines $[${COLUMNS}-${COLUMNS}/3] pages 0 trimout on\n"
+
+  export NLS_DATE_FORMAT='YYYY-MM-DD_HH24:MI:SS'
+  export NLS_NUMERIC_CHARACTERS=', '
+  SGA_DBF_USAGE_HEADER='DATE;HOUR;INSTANCE_NAME;SGA_TARGET_GB;POOL_USED_GB;SHARED_POOL_GB;SHARED_POOL_USED_GB;SHARED_POOL_FREE_GB;BUFFER_CACHE_GB;BUFFER_CACHE_USED_GB;OTHER_POOL_GB;OTHER_POOL_USED_GB;OTHER_POOL_FREE_GB;SGA_FREE;SGA_FREE_PERCENT;SGA_USED'
+  SGA_DBF_USAGE="COLUMN SGA_USAGE FORMAT A40
+SELECT TO_CHAR(SYSDATE,'YYYY-MM-DD')||';'||TO_CHAR(SYSDATE,'HH24:MI')||';'||(select sys_context('userenv','instance_name') from dual)
+||';'||SGA_TARGET_GB
+||';'||POOL_USED_GB
+||';'||SHARED_POOL_GB
+||';'||SHARED_POOL_USED_GB
+||';'||SHARED_POOL_FREE_GB
+||';'||BUFFER_CACHE_GB
+||';'||BUFFER_CACHE_USED_GB
+||';'||OTHER_POOL_GB
+||';'||OTHER_POOL_USED_GB
+||';'||OTHER_POOL_FREE_GB
+||';'||(SGA_TARGET_GB-BUFFER_CACHE_USED_GB-SHARED_POOL_USED_GB-OTHER_POOL_USED_GB)
+||';'||round(((SGA_TARGET_GB-BUFFER_CACHE_USED_GB-SHARED_POOL_USED_GB-OTHER_POOL_USED_GB)*100/SGA_TARGET_GB),1)
+||';'||(SHARED_POOL_USED_GB+BUFFER_CACHE_USED_GB+OTHER_POOL_USED_GB)
+    FROM
+    (SELECT round(sum(number_of_blocks*db_block_size/1073741824),1) BUFFER_CACHE_USED_GB
+    ,(select round(bytes/1073741824,1) from v\$sgastat where name = 'buffer_cache') BUFFER_CACHE_GB
+    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool like '%pool%') POOL_USED_GB
+    ,(select round(bytes/1073741824,1) GB from v\$sgainfo where name = 'Shared Pool Size') SHARED_POOL_GB
+    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool = 'shared pool' and name != 'free memory') SHARED_POOL_USED_GB
+    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool = 'shared pool' and name = 'free memory') SHARED_POOL_FREE_GB
+    ,(select round(sum(bytes/1073741824),1) GB from v\$sgainfo where lower(name) like '%pool%' and name != 'Shared Pool Size') OTHER_POOL_GB
+    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool like '%pool%' and pool != 'shared pool' and name != 'free memory') OTHER_POOL_USED_GB
+    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool like '%pool%' and pool != 'shared pool' and name = 'free memory') OTHER_POOL_FREE_GB
+--    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool like '%pool%' and pool in ('large pool','streams pool','numa pool')) OTHER_POOL_USED_GB
+--    ,(select round(sum(df.bytes/1073741824),0) from v\$datafile df, v\$tablespace ts where df.ts#=ts.ts# and ts.NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS')) DBF_SIZE_GB
+--    ,(select round(sum(bytes/1073741824),0) from dba_data_files where TABLESPACE_NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS')) DBF_SIZE_GB
+--    ,(select round(sum(user_bytes/1073741824),0) from dba_data_files where TABLESPACE_NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS')) DBF_SIZE_GB
+--    ,(select round(sum(bytes/1073741824),0) from dba_free_space where TABLESPACE_NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS')) DBF_SIZE_FREE_GB
+    ,SGA_TARGET_GB
+      FROM
+      (
+      SELECT o.object_name, COUNT(*) number_of_blocks
+      ,(SELECT value FROM V\$PARAMETER WHERE name = 'db_block_size') db_block_size
+      ,(select round(value/1073741824,1) GB from v\$parameter where name='sga_target') SGA_TARGET_GB
+       FROM DBA_OBJECTS o, V\$BH bh
+       WHERE o.data_object_id = bh.OBJD
+       AND o.owner != 'SYS'
+       GROUP BY o.object_Name
+       --ORDER BY COUNT(*)
+      )
+    GROUP BY SGA_TARGET_GB
+    )
+;"
+
+
+  [ ! -z "${DEBUG}" ] && (PROMPT_COMMAND_PREV=$PROMPT_COMMAND; unset PROMPT_COMMAND) && set -x
+
+  HEADER=${SQL_COLLECTION}
+  [[ "${VERBOSE}" == "YES" ]] && HEADER="${SQL_COLLECTION} : ${!SQL_COLLECTION}"
+  QUERYRAW="${!SQL_COLLECTION}"    QUERY2EXEC="${SQL_PARAM}${QUERYRAW}"
+
+function ExecPrint_Result() {
+  for SID in $(ps -eo args | grep pm[o]n_"${DB_FILTER}" | cut -d'_' -f3- | grep -v "^+\|^-\|^$\|^DBA" | sort); do . oraenv <<<${SID}>/dev/null
+    ORA_VERSION=$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER")
+    [ ! -z "${ORAVERFILTER}" ] && [[ ! ${ORA_VERSION} =~ ${ORAVERFILTER} ]] && continue
+#    echo -e "\nDATE : ${DATE}\n${COLOR_TITLE}${ORACLE_SID} : ${ORA_VERSION}${COLOR_STD}" # : ${COLOR_CMD}${QUERYRAW//\\n/ & }${COLOR_STD}"
+    QUERY_OUTPUT=$(echo -e "${QUERY2EXEC}" | sqlplus -S / as sysdba)
+    [[ "${QUERY_OUTPUT}" =~ ORA-|TNS-|RMAN-|-bash|KO ]] && OUTCOLOR=${COLOR_KO} || OUTCOLOR=${COLOR_STD}
+    [[ "${QUERY_OUTPUT}" =~ "OK" ]] && OUTCOLOR=${COLOR_OK}
+#    [[ -z "${VERBOSE}" ]] && echo -e "${COLOR_RESULT}${HEADER}${COLOR_STD}"
+#    [[ "${VERBOSE}" == "YES" ]] && echo -e "${COLOR_RESULT}${HEADER}${COLOR_STD}"
     [[ -z "${VERBOSE}" ]] && echo -e "${OUTCOLOR}${QUERY_OUTPUT}${COLOR_STD}"
     [[ "${VERBOSE}" == "YES" ]] && (set -f; echo -e "${OUTCOLOR:-${COLOR_RESULT}}$(echo ${QUERY_OUTPUT})${COLOR_STD}"; set +f);
   done
+}
+
+if [ ! -z "${LOOP_TIMER}" ]; then
+    echo "Press [CTRL+C] to stop the loop ..."
+    echo "${SGA_DBF_USAGE_HEADER}"
+    while : 
+    do
+        ExecPrint_Result
+        sleep ${LOOP_TIMER}
+    done
+else
+    ExecPrint_Result
+fi
+
 
   [ ! -z "${DEBUG}" ] && PROMPT_COMMAND=$PROMPT_COMMAND_PREV && set +x
 }
@@ -636,6 +765,11 @@ export ANSIBLE_REMOTE_USER=root
 #export ANSIBLE_VAULT_PASSWORD_FILE=~/.vault_pass.txt
 
 
+function ethlink {
+  for i in 1 2 3 4 ; do echo "=== eth$i === : $(ethtool eth$i 2>&1 | egrep "Speed|Duplex|Link|Auto" | grep -Ev 'Unknown|Operation not permitted' | paste -s -)" ; done
+}
+
+
 ## Builtin Enhancement
 function dufg {
 ARG1=${1:-*}
@@ -643,12 +777,14 @@ du -sk ./${ARG1} | /usr/bin/sort -n | /usr/bin/awk 'BEGIN{ pref[1]="K"; pref[2]=
 }
 
 
-function ts_old {
-du -sk * | sort -n | awk '
+function ts1 {
+[ -n "$1" ] && filter="$*" || filter="*"
+du -sk ${filter} | sort -n | awk '
      BEGIN {
         split("KB,MB,GB,TB,PB,EB,ZB,YB", Units, ",");
      }
      {
+        total = total + $1
         u = 1;
         while ($1 >= 1024) {
            $1 = $1 / 1024;
@@ -657,7 +793,15 @@ du -sk * | sort -n | awk '
         $1 = sprintf("%.1f %s", $1, Units[u]);
         print $0;
      }
-    '
+    END {
+      u = 1;
+      while (total >= 1024) {
+        total = total / 1024;
+        u += 1
+      }
+      printf("\n%.1f %s Total\n", total, Units[u]);
+    }
+'
 }
 
 
@@ -751,7 +895,7 @@ pathremove () {
 }
 
 
-function MemRpt_Int () {
+function MemRpt () {
 
 ## https://www.kernel.org/doc/Documentation/vm/hugetlbpage.txt
 ## HugePages_Total is the size of the pool of huge pages.
@@ -775,15 +919,32 @@ function MemRpt_Int () {
 ##                 /sys/kernel/mm/hugepages (described below).
 ## AnonHugePages entry lists the number of pages that the newer Transparent Huge Page mechanism currently has in use
 
-    if [ -z "$1" ]; then
-    MEM_TOTAL_GB=$(free -g | grep Mem | awk '{print $2}')
-    MEM_USED_GB=$(free -g | grep Mem | awk '{print $3}')
-    MEM_FREE_GB=$(free -g | grep Mem | awk '{print $4}')
-    MEM_CACHE_GB=$(free -g | grep Mem | awk '{print $6}')
-    MEM_AVAIL_GB=$(free -g | grep Mem | awk '{print $7}')
-    SWAP_TOTAL_GB=$(free -g | grep Swap | awk '{print $2}')
-    SWAP_USED_GB=$(free -g | grep Swap | awk '{print $3}')
-    SWAP_FREE_GB=$(free -g | grep Swap | awk '{print $4}')
+
+    args=$*
+    for argv in $* ; do
+        case $argv in
+        -h*)     Usage;;
+        --csv)   local CSV=1 ; shift 1 ;;
+        --int)   local INT=1 ; shift 1 ;;
+        --float) local FLOAT=1 ; shift 1 ;;
+        *) Usage;;
+        #-exemple_1)    export EX=YES ; shift 1 ;;
+        #-exemple_2*)    export EX=$2 ;  if [ "$2" = "" ]; then Usage ; else shift 2 ; fi ;;
+        esac
+    done
+
+    [ -z "${INT}" -a -z "${FLOAT}" ] && local FLOAT=1
+    [ -n "${FLOAT}" ] && local BC_SCALE='scale=2; '
+    #[ -n "${CSV}" ] && stty flusho
+
+    local MEM_TOTAL_GB=$(free -g | grep Mem | awk '{print $2}')
+    local MEM_USED_GB=$(free -g | grep Mem | awk '{print $3}')
+    local MEM_FREE_GB=$(free -g | grep Mem | awk '{print $4}')
+    local MEM_CACHE_GB=$(free -g | grep Mem | awk '{print $6}')
+    local MEM_AVAIL_GB=$(free -g | grep Mem | awk '{print $7}')
+    local SWAP_TOTAL_GB=$(free -g | grep Swap | awk '{print $2}')
+    local SWAP_USED_GB=$(free -g | grep Swap | awk '{print $3}')
+    local SWAP_FREE_GB=$(free -g | grep Swap | awk '{print $4}')
 
     echo "Memory_Total GB : ${MEM_TOTAL_GB}"
     echo "Memory_Used  GB : ${MEM_USED_GB}"
@@ -794,29 +955,46 @@ function MemRpt_Int () {
     echo "Swap_Used  GB : ${SWAP_USED_GB}"
     echo "Swap_Free  GB : ${SWAP_FREE_GB}"
 
-    PAGE_SIZE=$(getconf PAGE_SIZE)
-    SHMALL=$(cat /proc/sys/kernel/shmall)
-    SHM_TOTAL_GB=$(( ${PAGE_SIZE} * ${SHMALL} / 1073741824 ))
-    SHM_USED_GB=$(ipcs -m | grep oracle | awk '{sum += $5} END {printf "%.0f", sum/1073741824}')
-    SHM_FREE_GB=$(( ${SHM_TOTAL_GB} - ${SHM_USED_GB} ))
+    local PAGE_SIZE=$(getconf PAGE_SIZE)
+    local SHMALL=$(cat /proc/sys/kernel/shmall)
 
+    if [ "${INT}" == "1" ]; then
+    local SHM_TOTAL_GB=$(( ${PAGE_SIZE} * ${SHMALL} / 1073741824 ))
+    local SHM_USED_GB=$(ipcs -m | grep oracle | awk '{sum += $5} END {printf "%.0f", sum/1073741824}')
+    local SHM_FREE_GB=$(( ${SHM_TOTAL_GB} - ${SHM_USED_GB} ))
+    elif [ "${FLOAT}" == "1" ]; then
+    local SHM_TOTAL_GB=$(echo "${BC_SCALE} ${PAGE_SIZE} * ${SHMALL} / 1073741824" | bc)
+    local SHM_USED_GB=$(ipcs -m | grep oracle | awk '{sum += $5} END {printf "%.0f", sum/1073741824}')
+    local SHM_FREE_GB=$(echo "${BC_SCALE} ${SHM_TOTAL_GB} - ${SHM_USED_GB}" | bc)
+    fi
     echo "Shared_Memory_Total GB : ${SHM_TOTAL_GB}"
     echo "Shared_Memory_Used  GB : ${SHM_USED_GB}"
     echo "Shared_Memory_Free  GB : ${SHM_FREE_GB}"
 
-    HPG_SIZE=$(grep Hugepagesize /proc/meminfo | awk '{print $2}')
-    HPG_TOTAL=$(grep HugePages_Total /proc/meminfo | awk '{print $2}')
-    HPG_FREE=$(grep HugePages_Free /proc/meminfo | awk '{print $2}')
-    HPG_RSVD=$(grep HugePages_Rsvd /proc/meminfo | awk '{print $2}')
+    local HPG_SIZE=$(grep Hugepagesize /proc/meminfo | awk '{print $2}')
+    local HPG_TOTAL=$(grep HugePages_Total /proc/meminfo | awk '{print $2}')
+    local HPG_FREE=$(grep HugePages_Free /proc/meminfo | awk '{print $2}')
+    local HPG_RSVD=$(grep HugePages_Rsvd /proc/meminfo | awk '{print $2}')
 
-    HPG_TOTAL_GB=$(( ${HPG_SIZE} * ${HPG_TOTAL} / 1048576 ))
-    HPG_RAWUSED_GB=$(( ${HPG_SIZE} * (${HPG_TOTAL} - ${HPG_FREE}) / 1048576 ))
-    HPG_RAWFREE_GB=$(( ${HPG_SIZE} * ${HPG_FREE} / 1048576 ))
-    HPG_RSVD_GB=$(( ${HPG_SIZE} * ${HPG_RSVD} / 1048576 ))
-    HPG_USED_GB=$(( ${HPG_SIZE} * (${HPG_TOTAL} - ${HPG_FREE} + ${HPG_RSVD}) / 1048576 ))
-    HPG_FREE_GB=$(( ${HPG_SIZE} * (${HPG_FREE} - ${HPG_RSVD}) / 1048576 ))
-    HPG_USED_PERCENT=$(( ${HPG_USED_GB} * 100 / ${HPG_TOTAL_GB} ))
-    HPG_FREE_PERCENT=$(( ${HPG_FREE_GB} * 100 / ${HPG_TOTAL_GB} ))
+    if [ "${INT}" == "1" ]; then
+    local HPG_TOTAL_GB=$(( ${HPG_SIZE} * ${HPG_TOTAL} / 1048576 ))
+    local HPG_RAWUSED_GB=$(( ${HPG_SIZE} * (${HPG_TOTAL} - ${HPG_FREE}) / 1048576 ))
+    local HPG_RAWFREE_GB=$(( ${HPG_SIZE} * ${HPG_FREE} / 1048576 ))
+    local HPG_RSVD_GB=$(( ${HPG_SIZE} * ${HPG_RSVD} / 1048576 ))
+    local HPG_USED_GB=$(( ${HPG_SIZE} * (${HPG_TOTAL} - ${HPG_FREE} + ${HPG_RSVD}) / 1048576 ))
+    local HPG_FREE_GB=$(( ${HPG_SIZE} * (${HPG_FREE} - ${HPG_RSVD}) / 1048576 ))
+    local HPG_USED_PERCENT=$(( ${HPG_USED_GB} * 100 / ${HPG_TOTAL_GB} ))
+    local HPG_FREE_PERCENT=$(( ${HPG_FREE_GB} * 100 / ${HPG_TOTAL_GB} ))
+    elif [ "${FLOAT}" == "1" ]; then
+    local HPG_TOTAL_GB=$(echo "${BC_SCALE} ${HPG_SIZE} * ${HPG_TOTAL} / 1048576" | bc)
+    local HPG_RAWUSED_GB=$(echo "${BC_SCALE} ${HPG_SIZE} * (${HPG_TOTAL} - ${HPG_FREE}) / 1048576" | bc)
+    local HPG_RAWFREE_GB=$(echo "${BC_SCALE} ${HPG_SIZE} * ${HPG_FREE} / 1048576" | bc)
+    local HPG_RSVD_GB=$(echo "${BC_SCALE} ${HPG_SIZE} * ${HPG_RSVD} / 1048576" | bc)
+    local HPG_USED_GB=$(echo "${BC_SCALE} ${HPG_SIZE} * (${HPG_TOTAL} - ${HPG_FREE} + ${HPG_RSVD}) / 1048576" | bc)
+    local HPG_FREE_GB=$(echo "${BC_SCALE} ${HPG_SIZE} * (${HPG_FREE} - ${HPG_RSVD}) / 1048576" | bc)
+    local HPG_USED_PERCENT=$(echo "${BC_SCALE}  ${HPG_USED_GB} * 100 / ${HPG_TOTAL_GB}" | bc)
+    local HPG_FREE_PERCENT=$(echo "${BC_SCALE} ${HPG_FREE_GB} * 100 / ${HPG_TOTAL_GB}" | bc)
+    fi
 
     echo "HugePages_Total   GB : ${HPG_TOTAL_GB}"
     echo "HugePages_RawUsed GB : ${HPG_RAWUSED_GB}"
@@ -827,110 +1005,25 @@ function MemRpt_Int () {
     echo "HugePages_Used     % : ${HPG_USED_PERCENT}"
     echo "HugePages_Free     % : ${HPG_FREE_PERCENT}"
 
-    MEM_FREE_GDTOTAL=$(( ${MEM_AVAIL_GB} + ${HPG_FREE_GB} ))
-    MEM_USED_GDTOTAL_PERCENT=$(( (${MEM_USED_GB} - ${HPG_TOTAL_GB} + ${HPG_USED_GB}) * 100 / ${MEM_TOTAL_GB} ))
-    MEM_FREE_GDTOTAL_PERCENT=$(( (${MEM_AVAIL_GB} + ${HPG_FREE_GB}) * 100 / ${MEM_TOTAL_GB} ))
+    if [ "${INT}" == "1" ]; then
+    local MEM_FREE_GDTOTAL=$(( ${MEM_AVAIL_GB} + ${HPG_FREE_GB} ))
+    local MEM_USED_GDTOTAL_PERCENT=$(( (${MEM_USED_GB} - ${HPG_TOTAL_GB} + ${HPG_USED_GB}) * 100 / ${MEM_TOTAL_GB} ))
+    local MEM_FREE_GDTOTAL_PERCENT=$(( (${MEM_AVAIL_GB} + ${HPG_FREE_GB}) * 100 / ${MEM_TOTAL_GB} ))
+    elif [ "${FLOAT}" == "1" ]; then
+    local MEM_FREE_GDTOTAL=$(echo "${BC_SCALE} ${MEM_AVAIL_GB} + ${HPG_FREE_GB}" | bc)
+    local MEM_USED_GDTOTAL_PERCENT=$(echo "${BC_SCALE} (${MEM_USED_GB} - ${HPG_TOTAL_GB} + ${HPG_USED_GB}) * 100 / ${MEM_TOTAL_GB}" | bc)
+    local MEM_FREE_GDTOTAL_PERCENT=$(echo "${BC_SCALE} (${MEM_AVAIL_GB} + ${HPG_FREE_GB}) * 100 / ${MEM_TOTAL_GB}" | bc)
+    fi
 
     echo "Memory_Grand_Total_Free  GB : ${MEM_FREE_GDTOTAL} / ${MEM_TOTAL_GB}"
     echo "Memory_Grand_Total_Used  %  : ${MEM_USED_GDTOTAL_PERCENT}"
     echo "Memory_Grand_Total_Free  %  : ${MEM_FREE_GDTOTAL_PERCENT}"
-    fi
 
-    [ "${1^^}" == "CSV" ] && echo "$(date "+%d/%m/%Y"),$(hostname -s),${MEM_FREE_GDTOTAL}" || return 0
+    #[ -n "${CSV}" ] && stty -flusho
+    #[ "${1^^}" == "CSV" ] && 
+    [ "${CSV}" == "1" ] && echo "$(date "+%d/%m/%Y"),$(hostname -s),${MEM_FREE_GDTOTAL}" || return 0
 }
 
-
-function MemRpt_Float () {
-
-## https://www.kernel.org/doc/Documentation/vm/hugetlbpage.txt
-## HugePages_Total is the size of the pool of huge pages.
-## HugePages_Free  is the number of huge pages in the pool that are not yet
-##                 allocated.
-## HugePages_Rsvd  is short for "reserved," and is the number of huge pages for
-##                 which a commitment to allocate from the pool has been made,
-##                 but no allocation has yet been made.  Reserved huge pages
-##                 guarantee that an application will be able to allocate a
-##                 huge page from the pool of huge pages at fault time.
-## HugePages_Surp  is short for "surplus," and is the number of huge pages in
-##                 the pool above the value in /proc/sys/vm/nr_hugepages. The
-##                 maximum number of surplus huge pages is controlled by
-##                 /proc/sys/vm/nr_overcommit_hugepages.
-## Hugepagesize    is the default hugepage size (in Kb).
-## Hugetlb         is the total amount of memory (in kB), consumed by huge
-##                 pages of all sizes.
-##                 If huge pages of different sizes are in use, this number
-##                 will exceed HugePages_Total * Hugepagesize. To get more
-##                 detailed information, please, refer to
-##                 /sys/kernel/mm/hugepages (described below).
-## AnonHugePages entry lists the number of pages that the newer Transparent Huge Page mechanism currently has in use
-
-    if [ -z "$1" ]; then
-    MEM_TOTAL_GB=$(free -g | grep Mem | awk '{print $2}')
-    MEM_USED_GB=$(free -g | grep Mem | awk '{print $3}')
-    MEM_FREE_GB=$(free -g | grep Mem | awk '{print $4}')
-    MEM_CACHE_GB=$(free -g | grep Mem | awk '{print $6}')
-    MEM_AVAIL_GB=$(free -g | grep Mem | awk '{print $7}')
-    SWAP_TOTAL_GB=$(free -g | grep Swap | awk '{print $2}')
-    SWAP_USED_GB=$(free -g | grep Swap | awk '{print $3}')
-    SWAP_FREE_GB=$(free -g | grep Swap | awk '{print $4}')
-
-    echo "Memory_Total GB : ${MEM_TOTAL_GB}"
-    echo "Memory_Used  GB : ${MEM_USED_GB}"
-    echo "Memory_Free  GB : ${MEM_FREE_GB}"
-    echo "Memory_Cache GB : ${MEM_CACHE_GB}"
-    echo "Memory_Avail GB : ${MEM_AVAIL_GB}"
-    echo "Swap_Total GB : ${SWAP_TOTAL_GB}"
-    echo "Swap_Used  GB : ${SWAP_USED_GB}"
-    echo "Swap_Free  GB : ${SWAP_FREE_GB}"
-
-    PAGE_SIZE=$(getconf PAGE_SIZE)
-    SHMALL=$(cat /proc/sys/kernel/shmall)
-    SHM_TOTAL_GB=$((10**2* ${PAGE_SIZE} * ${SHMALL} / 1073741824 ))e-2
-    SHM_USED_GB=$(ipcs -m | grep oracle | awk '{sum += $5} END {printf "%.0f", sum/1073741824}')
-    SHM_FREE_GB=$((10**3* ${SHM_TOTAL_GB} - ${SHM_USED_GB} ))e-3
-
-    echo "Shared_Memory_Total GB : ${SHM_TOTAL_GB}"
-    echo "Shared_Memory_Used  GB : ${SHM_USED_GB}"
-    echo "Shared_Memory_Free  GB : ${SHM_FREE_GB}"
-
-    HPG_SIZE=$(grep Hugepagesize /proc/meminfo | awk '{print $2}')
-    HPG_TOTAL=$(grep HugePages_Total /proc/meminfo | awk '{print $2}')
-    HPG_FREE=$(grep HugePages_Free /proc/meminfo | awk '{print $2}')
-    HPG_RSVD=$(grep HugePages_Rsvd /proc/meminfo | awk '{print $2}')
-
-    HPG_TOTAL_GB=$((10**2* ${HPG_SIZE} * ${HPG_TOTAL} / 1048576 ))e-2
-    HPG_RAWUSED_GB=$((10**3* ${HPG_SIZE} * (${HPG_TOTAL} - ${HPG_FREE}) / 1048576 ))e-3
-    HPG_RAWFREE_GB=$((10**3* ${HPG_SIZE} * ${HPG_FREE} / 1048576 ))e-3
-    HPG_RSVD_GB=$((10**3* ${HPG_SIZE} * ${HPG_RSVD} / 1048576 ))e-3
-    HPG_USED_GB=$((10**3* ${HPG_SIZE} * (${HPG_TOTAL} - ${HPG_FREE} + ${HPG_RSVD}) / 1048576 ))e-3
-    HPG_FREE_GB=$((10**3* ${HPG_SIZE} * (${HPG_FREE} - ${HPG_RSVD}) / 1048576 ))e-3
-    HPG_USED_PERCENT=$((10**3* ${HPG_USED_GB} * 100 / ${HPG_TOTAL_GB} ))e-3
-    HPG_FREE_PERCENT=$((10**3* ${HPG_FREE_GB} * 100 / ${HPG_TOTAL_GB} ))e-3
-
-    echo "HugePages_Total   GB : ${HPG_TOTAL_GB}"
-    echo "HugePages_RawUsed GB : ${HPG_RAWUSED_GB}"
-    echo "HugePages_RawFree GB : ${HPG_RAWFREE_GB}"
-    echo "HugePages_Rsvd    GB : ${HPG_RSVD_GB}"
-    echo "HugePages_Used    GB : ${HPG_USED_GB}"
-    echo "HugePages_Free    GB : ${HPG_FREE_GB}"
-    echo "HugePages_Used     % : ${HPG_USED_PERCENT}"
-    echo "HugePages_Free     % : ${HPG_FREE_PERCENT}"
-
-    MEM_FREE_GDTOTAL=$((10**3* ${MEM_AVAIL_GB} + ${HPG_FREE_GB} ))e-3
-    MEM_USED_GDTOTAL_PERCENT=$((10**3* (${MEM_USED_GB} - ${HPG_TOTAL_GB} + ${HPG_USED_GB}) * 100 / ${MEM_TOTAL_GB} ))e-3
-    MEM_FREE_GDTOTAL_PERCENT=$((10**3* (${MEM_AVAIL_GB} + ${HPG_FREE_GB}) * 100 / ${MEM_TOTAL_GB} ))e-3
-
-    echo "Memory_Grand_Total_Free  GB : ${MEM_FREE_GDTOTAL} / ${MEM_TOTAL_GB}"
-    echo "Memory_Grand_Total_Used  %  : ${MEM_USED_GDTOTAL_PERCENT}"
-    echo "Memory_Grand_Total_Free  %  : ${MEM_FREE_GDTOTAL_PERCENT}"
-    fi
-
-    [ "${1^^}" == "CSV" ] && echo "$(date "+%d/%m/%Y"),$(hostname -s),${MEM_FREE_GDTOTAL}" || return 0
-}
-
-function MemRpt() {
-    MemRpt_Int
-}
 
 function hugepages_calculator() {
 #!/bin/bash
@@ -1008,9 +1101,6 @@ unset ORAENV_ASK
 }
 export -f oenv
 
-#SCRIPTS_DIR=${TOOLKIT_BIN:-/oracle/exploit}
-[ -x /prsyslib/toolunix/bin ] && SCRIPTS_DIR=/prsyslib/toolunix/bin
-[ -x /oracle/exploit ] && SCRIPTS_DIR=/oracle/exploit
 
 _ora_completion() {
     local cur prev ante
@@ -1018,8 +1108,8 @@ _ora_completion() {
     cur=${COMP_WORDS[COMP_CWORD]}
     prev=${COMP_WORDS[COMP_CWORD-1]}
     ante=${COMP_WORDS[COMP_CWORD-2]}
-    array_scripts=$(ls -p ${SCRIPTS_DIR} | grep -v '/')
-#    array_scripts=$(grep "^[^#|^$|^ *$]" ${SCRIPTS_DIR}/ora/env/init.allow | cut -d' ' -f2 | uniq -u)
+    array_scripts=$(ls -p ${SCRIPT_DIR} | grep -v '/')
+#    array_scripts=$(grep "^[^#|^$|^ *$]" ${SCRIPT_DIR}/ora/env/init.allow | cut -d' ' -f2 | uniq -u)
 #    array_scripts_args=( "${array_scripts[@]//ora_shell.sh}" )
 
     #word_list=$(cat /etc/oratab | cut -d':' -f1 | grep -v '#')
@@ -1028,9 +1118,9 @@ _ora_completion() {
     #word_list=$(grep -v -e "^#\|^ \|^$" /etc/oratab | cut -f1 -d: | grep "$(ps -eo args | grep pm[o]n | cut -d'_' -f3- | cut -c1-10)" | paste -sd " " -)
     word_list_instance=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-10)
     word_list_dbname=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-8)
-    word_list_bisudo=$(grep "^[^#|^$|^ *$]" ${SCRIPTS_DIR}/ora/env/init.allow 2>/dev/null | cut -d' ' -f2 | uniq)
-    #word_list_scripts=$(ls -p ${SCRIPTS_DIR} | grep -v '/')
-    word_list_tns=$(grep '^[^ ].*=$' ${SCRIPTS_DIR}/ora/wallet_infra/tnsnames.ora 2>/dev/null | cut -d= -f1)
+    word_list_bisudo=$(grep "^[^#|^$|^ *$]" ${SCRIPT_DIR}/ora/env/init.allow 2>/dev/null | cut -d' ' -f2 | uniq)
+    #word_list_scripts=$(ls -p ${SCRIPT_DIR} | grep -v '/')
+    word_list_tns=$(grep '^[^ ].*=$' ${SCRIPT_DIR}/ora/wallet_infra/tnsnames.ora 2>/dev/null | cut -d= -f1)
 
     [ -n "${DEBUG}" ] && echo "0=$0 1=$1 cur=$cur prev=$prev ante=$ante" #array_scripts="${array_scripts[@]}""
 
@@ -1054,7 +1144,7 @@ complete -F _ora_completion oenv rlsqlplus
 complete -F _ora_completion sqlplus srvctl exp expdp imp impdp
 #complete -F _ora_completion ora_sql.sh ora_dgmgrl.sh ora_rman.sh ora_rman_backup.sh ora_rman_config.sh ora_status_instance.sh ora_status_backup.sh
 #complete -F _ora_completion sql.sh dgmgrl.sh rman.sh rman_backup.sh rman_config.sh rman_config_to_tape.sh status_instance.sh status_backup.sh
-complete -F _ora_completion $(ls -p ${SCRIPTS_DIR} | grep -v '/' | grep '.sh$')
+[ -x "${SCRIPT_DIR}" ] && complete -F _ora_completion $(ls -p ${SCRIPT_DIR} | grep -v '/' | grep '.sh$')
 #complete -F _ora_completion $(ls -p /oracle/exploit | grep -v '/' | grep '.sh$' ; ls -p /oracle/scripts | grep -v '/' | grep '.sh$')
 
 ## FG : Allow "sudo" to complete

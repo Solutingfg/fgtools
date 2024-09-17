@@ -1,6 +1,7 @@
 #!/bin/bash
 
 ## GENERAL
+[ "${1}" == "-s" ] && SILENT=TRUE || unset SILENT
 
 # WORKAROUND DEFAULT ENV
 # Default Shell Deconnection Timeout
@@ -24,18 +25,20 @@ LIBDIR=${WORKDIR}/lib
 
 
 ## IF EXADATA
-if [ $(hostname | grep "dbadm") ]
-then
+if [ $(hostname | grep "dbadm") ]; then
   PLATFORM=EXADATA
-  echo "Plateforme : ${PLATFORM}"
+  WELCOME_MSG="Plateforme : ${PLATFORM}"
   [ ! -d "/prsyslib" ] && [ $(grep -c "/oracle/scripts" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit
 else
   PLATFORM=LINUX
-  echo "Plateforme : VIOLET (Hors Exadata)"
+  WELCOME_MSG="Plateforme : VIOLET (Hors Exadata)"
   #export PATH=$PATH:${WORKDIR}/bin:.
   alias fgenv=". ${LIBDIR}/fgenv"
   [ ! -f /etc/profile.d/zz-fgenv.sh ] && [ $(id -u) -eq 0 ] && echo ln -s ${LIBDIR}/fgenv /etc/profile.d/zz-fgenv.sh
   export LANG=C
+fi
+
+
 fi
 
 
@@ -86,11 +89,11 @@ case $(hostname --fqdn | cut -d'.' -f2- | tr '[:upper:]' '[:lower:]') in
         HL_COLOR=';41'
         HL_COLOR2=';47'
     ;;
-    *intres)  echo "Environnement : HPR (INT)"
+    *intres)  WELCOME_MSG="${WELCOME_MSG}\nEnvironnement : HPR (INT)"
         HL_COLOR=
         HL_COLOR2=
     ;;
-    *mapres)  echo "Environnement : HPR (MAP)"
+    *mapres)  WELCOME_MSG="${WELCOME_MSG}\nEnvironnement : HPR (MAP)"
         HL_COLOR=
         HL_COLOR2=
     ;;
@@ -208,18 +211,42 @@ alias env12='. ${LIBDIR}/env12.sh'
 
 
 function loopdb(){
-  unset DB_FILTER VERBOSE DEBUG
+  set +x
+  local DB_FILTER VERBOSE=0 DEBUG SQL_COLLECTION HEADER DEFINED_HEADER
   SQL_COLLECTION=${1} ; shift 1
 
-  for argv in $* ; do
-    case $argv in
-      -h*)  Usage;;
-      -d)  DB_FILTER=$2 ; if [ "$2" = "" ]; then Usage ; else shift 2 ; fi ;;
-      -v*) VERBOSE=YES ;  shift 1 ;;
+  function Usage() {
+  echo "Usage : ${FUNCTNAME} [query template] [options]
+  Query template :
+  IS_DTG, SGA_DBF_USAGE, DBPSU
+  
+  Options: 
+  -d    <INSTANCE_NAME>  : Filter INSTANCE_NAME or pattern (eg -d ALF)
+  --ver <ORACLE_VERSION> : 11.2|12|19.4
+  -v                     : Verbose enable
+  -dbg                   : Debug enable 
+  "
+  }
+
+  #echo args=$*
+  [ -z "${SQL_COLLECTION}" ] && Usage && return 1
+
+#  for argv in $@ ; do  ## FGR : Avec FOR le shift n'est pas pris en compte
+  while [ "$#" -gt 0 ]; do
+    #echo argv=$1
+    case "$1" in
+      -h*)  Usage ; return 1 ;;
+    --ver|-o)  ORAVERFILTER=$2 ; if [ "$2" = "" ]; then Usage ; return 1 ; else shift 2 ; fi ;;
+       -d)  DB_FILTER=".*$2.*" ; if [ "$2" = "" ]; then Usage ; return 1 ; else shift 2 ; fi ;;
+      -v)  VERBOSE=1 ; shift 1 ;;
+      -vv)  VERBOSE=2 ; shift 1 ;;
       --debug|-dbg) DEBUG=YES ;  shift 1 ;;
-      -f)  FORCE=1 ; shift 1 ;;
-      #-exemple_1)    export EX=YES ; shift 1 ;;
-      #-exemple_2*)   export EX=$2 ;  if [ "$2" = "" ]; then Usage ; else shift 2 ; fi ;;
+       -*)  echo "!!! Argument $1 invalide !!!"; Usage ; return 1 ;;
+        *)  echo "!!! Argument $1 invalide !!!"; Usage ; return 1 ;;
+      #-exemple_1)   export EX=YES ; shift 1 ;;
+      #-exemple_2*)  export EX=$2 ;  if [ "$2" = "" ]; then Usage ; else shift 2 ; fi ;;
+      #-exemple_3)   EX=$2 ; [ -z "$2" ] && Usage || shift 2 ;;
+      #--name=*) name="${1#*=}"; shift 1;;
     esac
   done
 
@@ -241,10 +268,18 @@ echo SQL=$SQL
   #alias echo='echo -e'
 
   SQL_PARAM="WHENEVER SQLERROR EXIT SQL.SQLCODE\nset head off feed off verify off echo off pages 0 trimout on trimspool on termout off wrap off set feed only\n"
-  SQL_PARAM="WHENEVER SQLERROR EXIT SQL.SQLCODE\nset head off pages 0 trimout on\n"
+  SQL_PARAM="WHENEVER SQLERROR EXIT SQL.SQLCODE\nset head off lines $[${COLUMNS}-${COLUMNS}/3] pages 0 trimout on\n"
 
+  #ENVSQL="${ENVSQL}"
+    #ENVSQL_HEADER="CPU_COUNT"
   DB_VERSION="SELECT VERSION FROM PRODUCT_COMPONENT_VERSION WHERE PRODUCT LIKE '%Oracle Database%';"
   DBID='select dbid from v$database;'
+  DBPSU11="SELECT TO_CHAR(action_time, 'YYYY-MM-DD HH24:MI:SS') AS action_time,action,version,id,comments FROM sys.dba_registry_history where comments like 'BP%' ORDER by action_time asc;"
+  DBPSU12="SELECT TO_CHAR(action_time, 'YYYY-MM-DD HH24:MI:SS') AS action_time,action,status,description,version FROM sys.dba_registry_sqlpatch where description like '%PSU%' ORDER by action_time;"
+  DBPSUVER=DBPSU${ORAVER}; DBPSU=${!DBPSUVER}
+  DIRECTORIES="col OWNER for a10\ncol DIRECTORY_NAME for a25\ncol DIRECTORY_PATH for a70\nselect OWNER,DIRECTORY_NAME,DIRECTORY_PATH from dba_directories where DIRECTORY_NAME like '%PUMP%';"
+  HEATMAP="col owner for a10\ncol SEGMENT_NAME for a20\nSELECT owner, segment_name, segment_type, SUM(bytes/1048576) seg_size FROM dba_extents WHERE tablespace_name='SYSAUX' AND SEGMENT_NAME = 'HEATMAP' GROUP BY owner,segment_name , segment_type;"
+  STARTUP_TIME="select STARTUP_TIME from v\$instance;"
   IS_DTG="show parameter dg_broker_start"
   IS_RAC="select VALUE from v\$parameter where upper(NAME) = 'CLUSTER_DATABASE_INSTANCES';"
   IS_RAC="select count(*) NBR_INSTANCES from gv\$instance;"
@@ -252,6 +287,7 @@ echo SQL=$SQL
   RAC_TYPE="select DECODE(INSTR(instance_name,'_'),0,'RAC','RACONE') RAC_TYPE from v\$instance;"
     RAC_TYPE_HEADER="RAC_TYPE CLUSTER_DATABASE_INSTANCES COUNT_GV\$INSTANCE"
   NB_INST="select count(*) from gv\$instance;"
+  NB_THREAD="select count(distinct(THREAD#)) NB_THREAD from v\$log;"
   DIFF_INST_THREAD="select (select DECODE(count(*),1,2,count(*)) FROM v\$active_instances) - (select nvl(count(distinct(THREAD#)),0) from v\$standby_log) DIFF_INST_THREAD from dual;"
   CDI="select VALUE from v\$parameter where upper(NAME) = 'CLUSTER_DATABASE_INSTANCES';"
   FORCE_LOGGING="select FORCE_LOGGING from v\$database;"
@@ -300,10 +336,16 @@ echo SQL=$SQL
     )
 ;"
 
+
   [ ! -z "${DEBUG}" ] && (PROMPT_COMMAND_PREV=$PROMPT_COMMAND; unset PROMPT_COMMAND) && set -x
 
+  pad_space="                    "
+  pad_size=10
+
   HEADER=${SQL_COLLECTION}
-  [[ "${VERBOSE}" == "YES" ]] && HEADER="${SQL_COLLECTION} : ${!SQL_COLLECTION}"
+  DEFINED_HEADER=$(echo ${SQL_COLLECTION}_HEADER)
+  [ ! -z "${!DEFINED_HEADER}" ] && HEADER+=" : ${!DEFINED_HEADER}"
+  (( ${VERBOSE} >= 2 )) && HEADER+=" : ${!SQL_COLLECTION}"
 #echo ${!SQL_COLLECTION}
 #echo ${!SQL_COLLECTION//$/\\$}
 #echo ${!SQL_COLLECTION//\"/}
@@ -314,11 +356,20 @@ echo SQL=$SQL
 
   for SID in $(ps -eo args | grep pm[o]n_"${DB_FILTER}" | cut -d'_' -f3- | grep -v "^+\|^-\|^$\|^DBA" | sort); do . oraenv <<<${SID}>/dev/null
     ORA_VERSION=$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER")
-    #[[ ${ORA_VERSION} =~ 11.2 ]] && continue
-    echo -e "\n${COLOR_TITLE}${ORACLE_SID} : ${ORA_VERSION}${COLOR_STD}" # : ${COLOR_CMD}${QUERYRAW//\\n/ & }${COLOR_STD}"
+    [ ! -z "${ORAVERFILTER}" ] && [[ ! ${ORA_VERSION} =~ ${ORAVERFILTER} ]] && continue
+    (( ${VERBOSE} >= 1 )) && echo -e "\n${COLOR_TITLE}${ORACLE_SID} : ${ORA_VERSION}${COLOR_STD}" # : ${COLOR_CMD}${QUERYRAW//\\n/ & }${COLOR_STD}"
     QUERY_OUTPUT=$(echo -e "${QUERY2EXEC}" | sqlplus -S / as sysdba)
     [[ "${QUERY_OUTPUT}" =~ ORA-|TNS-|RMAN-|-bash|KO ]] && OUTCOLOR=${COLOR_KO} || OUTCOLOR=${COLOR_STD}
     [[ "${QUERY_OUTPUT}" =~ "OK" ]] && OUTCOLOR=${COLOR_OK}
+    (( ${VERBOSE} == 0 )) && echo "${ORACLE_SID}${pad_space:0:$((${pad_size}-${#ORACLE_SID}))} (${ORA_VERSION}) : ${HEADER} : ${QUERY_OUTPUT}"
+    (( ${VERBOSE} >= 1 )) && echo -e "${COLOR_RESULT}${HEADER}${COLOR_STD}"
+    (( ${VERBOSE} == 1 )) && (set -f; echo -e "${OUTCOLOR:-${COLOR_RESULT}}$(echo ${QUERY_OUTPUT})${COLOR_STD}"; set +f);
+    (( ${VERBOSE} >= 2 )) && echo -e "${OUTCOLOR}${QUERY_OUTPUT}${COLOR_STD}"
+
+  done
+
+  [ ! -z "${DEBUG}" ] && PROMPT_COMMAND=$PROMPT_COMMAND_PREV && set +x
+}
     [[ -z "${VERBOSE}" ]] && echo -e "${COLOR_RESULT}${HEADER}${COLOR_STD}"
     [[ "${VERBOSE}" == "YES" ]] && echo -e "${COLOR_RESULT}${HEADER}${COLOR_STD}"
     [[ -z "${VERBOSE}" ]] && echo -e "${OUTCOLOR}${QUERY_OUTPUT}${COLOR_STD}"
@@ -333,7 +384,7 @@ function oralisthome () {
 printf "%6s %-20s %-80s\n" "PID" "NAME" "ORACLE_HOME"
 pgrep -af _pmon_ |
   while read pid pname  y ; do
-    printf "%6s %-20s %-80s\n" $pid $pname `ls -l /proc/$pid/exe | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//' | sort | uniq`
+    printf "%6s %-20s %-80s\n" $pid $pname $(sudo ls -l /proc/$pid/exe | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//' | sort | uniq)
   done
 }
 
@@ -353,6 +404,7 @@ for LSN_NAME in ${LSN_NAME_LIST}; do
     #eval ${cmd} | highlight cyan 'lsnrctl status'
 done
 }
+
 
 function lsnGetservice () (
 echo "Usage : Connected as 'grid' ${FUNCNAME} <TRI>.*X1"
@@ -387,6 +439,43 @@ echo "Usage : Connected as 'grid' ${FUNCNAME} <TRI>.*X1"
     fi
 #set +x
 )
+
+function oracle_wallet(){
+    # FGR : #orapki wallet change_pwd -wallet ${REP_WALLET_INFRA} -oldpwd '<old_passwd>' -newpwd '<new_passwd>'
+    if $(which --skip-alias mkstore &>/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
+    local TOOLKIT_DIR=$(dirname $(which --skip-alias ora_functions.sh))
+    local REP_WALLET_INFRA="${TOOLKIT_DIR:-/prsyslib/toolunix/bin}/ora/wallet_infra"
+    export TNS_ADMIN=${TNS_ADMIN:-$REP_WALLET_INFRA}
+    echo "TNS_ADMIN=${TNS_ADMIN}"
+    [ -z "${WALLET_PASSWD}" ] && read -p "Enter Wallet Password : " -s WALLET_PASSWD
+    if ! $(echo "${WALLET_PASSWD}" | mkstore -wrl ${REP_WALLET_INFRA} -listCredential &>/dev/null) ; then echo 'Wrong Wallet password' ; fi
+    action=${1:-PRINT}
+
+    NBR_ENTRIES=$(echo "${WALLET_PASSWD}" | mkstore -wrl ${REP_WALLET_INFRA} -listCredential | grep -c [0-9]:)
+
+    [ "${action}" == "CREATE_WALLET_COMMAND" ] && echo "echo -e \"\${WALLET_PASSWD}\n\${WALLET_PASSWD}\" | mkstore -wrl ${REP_WALLET_INFRA} -create"
+
+    for i in $(seq 1 ${NBR_ENTRIES}) ; do
+        unset WLT_USERNAME WLT_PASSWORD WLT_CONNECT_STRING
+        WLT_USERNAME=$(echo "${WALLET_PASSWD}" | mkstore -wrl ${REP_WALLET_INFRA} -viewEntry oracle.security.client.username${i} | grep username${i} | awk -F '= ' '{print $NF}')
+        WLT_PASSWORD=$(echo "${WALLET_PASSWD}" | mkstore -wrl ${REP_WALLET_INFRA} -viewEntry oracle.security.client.password${i} | grep password${i} | awk -F '= ' '{print $NF}')
+        WLT_CONNECT_STRING=$(echo "${WALLET_PASSWD}" | mkstore -wrl ${REP_WALLET_INFRA} -viewEntry oracle.security.client.connect_string${i} | grep connect_string${i}| awk -F '= ' '{print $NF}')
+
+        [ "${action}" == "PRINT" ] && echo "${WLT_USERNAME}@${WLT_CONNECT_STRING}"
+        [ "${action}" == "PRINT_PWD" ] && echo "${WLT_USERNAME}/${WLT_PASSWORD}@${WLT_CONNECT_STRING}"
+        [ "${action}" == "TEST_CNX" ] && WLT_ENTRY="${WLT_USERNAME}/${WLT_PASSWORD}@${WLT_CONNECT_STRING}"
+
+        if [ "${action}" == "TEST_CNX" ] ; then
+            timeout 5 echo exit | sqlplus -L -S ${WLT_USERNAME}/${WLT_PASSWORD}@${WLT_CONNECT_STRING} && WLT_ENTRY+=" : cnx_OK" || WLT_ENTRY+=" : cnx_KO"
+        fi
+
+        if [ "${action}" == "CREATE_WALLET_COMMAND" ] ; then
+            echo "echo \${WALLET_PASSWD} | mkstore -wrl \${REP_WALLET_INFRA} -createCredential ${WLT_CONNECT_STRING} ${WLT_USERNAME} ${WLT_PASSWORD}"
+        fi
+
+    [ "${action}" == "TEST_CNX" ] && echo "${WLT_ENTRY}"
+    done
+}
 
 function asmdu() {
 # https://blog.pythian.com/amcmd-better-du/
@@ -444,9 +533,11 @@ function ASMvsDB_DIFF(){
 }
 
 
-function sudo_function () {
-export -f $1
-su username -c "bash -c $1"
+function cr_pfile_from_spfile() {
+
+SPFILE_ASM=$(srvctl config database -d ${DBUNAME} | grep spfile | cut -d' ' -f2)
+#export ORACLE_HOME=
+echo -e "create pfile='/tmp/init@.ora' from spfile='${SPFILE_ASM}' ;" | sqlplus -S / as sysdba
 }
 
 
@@ -455,13 +546,16 @@ alias fgdbg='bash -xc '\''echo "0:$0 ; 0-modded:${0#bash} ; 1:$1"'\'''
 alias yumrepo="egrep -Hi '(^\[|^enabled)' /etc/yum.repos.d/*"
 alias resetenv='env -i PS1="[\u@\h \W]\$ " bash --norc --noprofile'
 
+
 ## ALIAS SYSTEM
 alias ls='ls --color=auto'
 alias l='ls -ail'
 alias ll='ls -al'
-alias lt='ls -altr'
+alias lt='ls -alt'
+alias ltr='ls -altr'
 alias lh='ls -alh'
-alias lht='ls -alhtr'
+alias lht='ls -alht'
+alias lhtr='ls -alhtr'
 alias grep='grep --color=auto'
 #alias echopath='echo $PATH | tr : \\n'
 alias echopath='echo -e ${PATH//:/\\n}'
@@ -473,10 +567,12 @@ alias vi=vim
 alias ssh='ssh -o ServerAliveInterval=30'
 alias netbreakdown="netstat -nat | awk '{print $6}' | sort | uniq -c | sort -n"
 
+
 ## ALIAS APPS
 alias iperf3_stop='pkill -ecnf "iperf3 -sD"'
 alias nmon=${BINDIR}/nmon
 alias nmon14g=${BINDIR}/nmon14g_x86_rhel7
+
 
 ## SCREEN
 # To avoid error : screen Cannot open your terminal '/dev/pts/0' - please check.
@@ -518,6 +614,7 @@ export SCREENRC=${LIBDIR}/.screenrc
 #du -sk * | awk '{ total = total + $1 } END { print total }'
 #ls -l | awk '{sum += $5} END {print sum}'
 
+
 ## TMUX
 alias tmux='tmux -f ${LIBDIR}/.tmux.conf'
 alias tms='tmux new -s'
@@ -539,6 +636,7 @@ export ANSIBLE_REMOTE_USER=root
 #export ANSIBLE_VAULT_PASSWORD_FILE=~/.vault_pass.txt
 
 
+## Builtin Enhancement
 function dufg {
 ARG1=${1:-*}
 du -sk ./${ARG1} | /usr/bin/sort -n | /usr/bin/awk 'BEGIN{ pref[1]="K"; pref[2]="M"; pref[3]="G";} { total = total + $1; x = $1; y = 1; while( x > 1024 ) { x = (x + 1023)/1024; y++; } printf("%g%s\t%s\n",int(x*10)/10,pref[y],$2); } END { y = 1; while( total > 1024 ) { total = (total + 1023)/1024; y++; } printf("Total: %g%s\n",int(total*10)/10,pref[y]); }'
@@ -615,20 +713,23 @@ function sizebyMonthfr () { find ./ -type f -printf '%TY-%Tm %s\n' | awk '{sum[$
 
 adGetuserInfo () {
     [ -z "$1" ] && echo Arg 1 is Required && return 1
-    [ -n "$2" ] && GREP_GROUP="| grep -i $2"
     getent passwd $1
-    eval "getent group | grep -i $1 | cut -d: -f1 ${GREP_GROUP}"
+    [ -n "$2" ] && GREP_GROUP="| grep -i $2" && \
+      eval "getent group | grep -i $1 | cut -d: -f1 ${GREP_GROUP}"
 }
 
 adGetgroupInfo () {
     [ -z "$1" ] && echo Arg 1 is Required && return 1
-    echo $1 GID:$(getent group $1 | cut -d: -f3)
+    echo $(getent group $1 | cut -d: -f1) GID:$(getent group $1 | cut -d: -f3)
     for aduser in $(getent group $1 | cut -d: -f4 | sed "s/,/\n/g" | sort)
     do
         [ -z "$2" ] && getent passwd $aduser | cut -d: -f1,5
         [ "$2" == "-v" ] && adGetuserInfo $aduser $3
     done
 }
+
+
+nfsgetacl() { nfs4_getfacl "$@" | grep -Ev "OWNER|GROUP|EVERYONE"; };
 
 
 pathmunge () {
@@ -650,7 +751,30 @@ pathremove () {
 }
 
 
-function MemRpt () {
+function MemRpt_Int () {
+
+## https://www.kernel.org/doc/Documentation/vm/hugetlbpage.txt
+## HugePages_Total is the size of the pool of huge pages.
+## HugePages_Free  is the number of huge pages in the pool that are not yet
+##                 allocated.
+## HugePages_Rsvd  is short for "reserved," and is the number of huge pages for
+##                 which a commitment to allocate from the pool has been made,
+##                 but no allocation has yet been made.  Reserved huge pages
+##                 guarantee that an application will be able to allocate a
+##                 huge page from the pool of huge pages at fault time.
+## HugePages_Surp  is short for "surplus," and is the number of huge pages in
+##                 the pool above the value in /proc/sys/vm/nr_hugepages. The
+##                 maximum number of surplus huge pages is controlled by
+##                 /proc/sys/vm/nr_overcommit_hugepages.
+## Hugepagesize    is the default hugepage size (in Kb).
+## Hugetlb         is the total amount of memory (in kB), consumed by huge
+##                 pages of all sizes.
+##                 If huge pages of different sizes are in use, this number
+##                 will exceed HugePages_Total * Hugepagesize. To get more
+##                 detailed information, please, refer to
+##                 /sys/kernel/mm/hugepages (described below).
+## AnonHugePages entry lists the number of pages that the newer Transparent Huge Page mechanism currently has in use
+
     if [ -z "$1" ]; then
     MEM_TOTAL_GB=$(free -g | grep Mem | awk '{print $2}')
     MEM_USED_GB=$(free -g | grep Mem | awk '{print $3}')
@@ -678,23 +802,30 @@ function MemRpt () {
 
     echo "Shared_Memory_Total GB : ${SHM_TOTAL_GB}"
     echo "Shared_Memory_Used  GB : ${SHM_USED_GB}"
-    echo "Shared_Memory_Used  GB : ${SHM_FREE_GB}"
+    echo "Shared_Memory_Free  GB : ${SHM_FREE_GB}"
 
     HPG_SIZE=$(grep Hugepagesize /proc/meminfo | awk '{print $2}')
     HPG_TOTAL=$(grep HugePages_Total /proc/meminfo | awk '{print $2}')
     HPG_FREE=$(grep HugePages_Free /proc/meminfo | awk '{print $2}')
+    HPG_RSVD=$(grep HugePages_Rsvd /proc/meminfo | awk '{print $2}')
 
-    HPG_TOTAL_GB=$(( ${HPG_SIZE} * ${HPG_TOTAL} / 1048576))
-    HPG_USED_GB=$(( ${HPG_SIZE} * (${HPG_TOTAL} - ${HPG_FREE}) / 1048576 ))
-    HPG_FREE_GB=$(( ${HPG_SIZE} * ${HPG_FREE} / 1048576 ))
+    HPG_TOTAL_GB=$(( ${HPG_SIZE} * ${HPG_TOTAL} / 1048576 ))
+    HPG_RAWUSED_GB=$(( ${HPG_SIZE} * (${HPG_TOTAL} - ${HPG_FREE}) / 1048576 ))
+    HPG_RAWFREE_GB=$(( ${HPG_SIZE} * ${HPG_FREE} / 1048576 ))
+    HPG_RSVD_GB=$(( ${HPG_SIZE} * ${HPG_RSVD} / 1048576 ))
+    HPG_USED_GB=$(( ${HPG_SIZE} * (${HPG_TOTAL} - ${HPG_FREE} + ${HPG_RSVD}) / 1048576 ))
+    HPG_FREE_GB=$(( ${HPG_SIZE} * (${HPG_FREE} - ${HPG_RSVD}) / 1048576 ))
     HPG_USED_PERCENT=$(( ${HPG_USED_GB} * 100 / ${HPG_TOTAL_GB} ))
     HPG_FREE_PERCENT=$(( ${HPG_FREE_GB} * 100 / ${HPG_TOTAL_GB} ))
 
-    echo "HugePages_Total GB : ${HPG_TOTAL_GB}"
-    echo "HugePages_Used  GB : ${HPG_USED_GB}"
-    echo "HugePages_Free  GB : ${HPG_FREE_GB}"
-    echo "HugePages_Used   % : ${HPG_USED_PERCENT}"
-    echo "HugePages_Free   % : ${HPG_FREE_PERCENT}"
+    echo "HugePages_Total   GB : ${HPG_TOTAL_GB}"
+    echo "HugePages_RawUsed GB : ${HPG_RAWUSED_GB}"
+    echo "HugePages_RawFree GB : ${HPG_RAWFREE_GB}"
+    echo "HugePages_Rsvd    GB : ${HPG_RSVD_GB}"
+    echo "HugePages_Used    GB : ${HPG_USED_GB}"
+    echo "HugePages_Free    GB : ${HPG_FREE_GB}"
+    echo "HugePages_Used     % : ${HPG_USED_PERCENT}"
+    echo "HugePages_Free     % : ${HPG_FREE_PERCENT}"
 
     MEM_FREE_GDTOTAL=$(( ${MEM_AVAIL_GB} + ${HPG_FREE_GB} ))
     MEM_USED_GDTOTAL_PERCENT=$(( (${MEM_USED_GB} - ${HPG_TOTAL_GB} + ${HPG_USED_GB}) * 100 / ${MEM_TOTAL_GB} ))
@@ -708,6 +839,98 @@ function MemRpt () {
     [ "${1^^}" == "CSV" ] && echo "$(date "+%d/%m/%Y"),$(hostname -s),${MEM_FREE_GDTOTAL}" || return 0
 }
 
+
+function MemRpt_Float () {
+
+## https://www.kernel.org/doc/Documentation/vm/hugetlbpage.txt
+## HugePages_Total is the size of the pool of huge pages.
+## HugePages_Free  is the number of huge pages in the pool that are not yet
+##                 allocated.
+## HugePages_Rsvd  is short for "reserved," and is the number of huge pages for
+##                 which a commitment to allocate from the pool has been made,
+##                 but no allocation has yet been made.  Reserved huge pages
+##                 guarantee that an application will be able to allocate a
+##                 huge page from the pool of huge pages at fault time.
+## HugePages_Surp  is short for "surplus," and is the number of huge pages in
+##                 the pool above the value in /proc/sys/vm/nr_hugepages. The
+##                 maximum number of surplus huge pages is controlled by
+##                 /proc/sys/vm/nr_overcommit_hugepages.
+## Hugepagesize    is the default hugepage size (in Kb).
+## Hugetlb         is the total amount of memory (in kB), consumed by huge
+##                 pages of all sizes.
+##                 If huge pages of different sizes are in use, this number
+##                 will exceed HugePages_Total * Hugepagesize. To get more
+##                 detailed information, please, refer to
+##                 /sys/kernel/mm/hugepages (described below).
+## AnonHugePages entry lists the number of pages that the newer Transparent Huge Page mechanism currently has in use
+
+    if [ -z "$1" ]; then
+    MEM_TOTAL_GB=$(free -g | grep Mem | awk '{print $2}')
+    MEM_USED_GB=$(free -g | grep Mem | awk '{print $3}')
+    MEM_FREE_GB=$(free -g | grep Mem | awk '{print $4}')
+    MEM_CACHE_GB=$(free -g | grep Mem | awk '{print $6}')
+    MEM_AVAIL_GB=$(free -g | grep Mem | awk '{print $7}')
+    SWAP_TOTAL_GB=$(free -g | grep Swap | awk '{print $2}')
+    SWAP_USED_GB=$(free -g | grep Swap | awk '{print $3}')
+    SWAP_FREE_GB=$(free -g | grep Swap | awk '{print $4}')
+
+    echo "Memory_Total GB : ${MEM_TOTAL_GB}"
+    echo "Memory_Used  GB : ${MEM_USED_GB}"
+    echo "Memory_Free  GB : ${MEM_FREE_GB}"
+    echo "Memory_Cache GB : ${MEM_CACHE_GB}"
+    echo "Memory_Avail GB : ${MEM_AVAIL_GB}"
+    echo "Swap_Total GB : ${SWAP_TOTAL_GB}"
+    echo "Swap_Used  GB : ${SWAP_USED_GB}"
+    echo "Swap_Free  GB : ${SWAP_FREE_GB}"
+
+    PAGE_SIZE=$(getconf PAGE_SIZE)
+    SHMALL=$(cat /proc/sys/kernel/shmall)
+    SHM_TOTAL_GB=$((10**2* ${PAGE_SIZE} * ${SHMALL} / 1073741824 ))e-2
+    SHM_USED_GB=$(ipcs -m | grep oracle | awk '{sum += $5} END {printf "%.0f", sum/1073741824}')
+    SHM_FREE_GB=$((10**3* ${SHM_TOTAL_GB} - ${SHM_USED_GB} ))e-3
+
+    echo "Shared_Memory_Total GB : ${SHM_TOTAL_GB}"
+    echo "Shared_Memory_Used  GB : ${SHM_USED_GB}"
+    echo "Shared_Memory_Free  GB : ${SHM_FREE_GB}"
+
+    HPG_SIZE=$(grep Hugepagesize /proc/meminfo | awk '{print $2}')
+    HPG_TOTAL=$(grep HugePages_Total /proc/meminfo | awk '{print $2}')
+    HPG_FREE=$(grep HugePages_Free /proc/meminfo | awk '{print $2}')
+    HPG_RSVD=$(grep HugePages_Rsvd /proc/meminfo | awk '{print $2}')
+
+    HPG_TOTAL_GB=$((10**2* ${HPG_SIZE} * ${HPG_TOTAL} / 1048576 ))e-2
+    HPG_RAWUSED_GB=$((10**3* ${HPG_SIZE} * (${HPG_TOTAL} - ${HPG_FREE}) / 1048576 ))e-3
+    HPG_RAWFREE_GB=$((10**3* ${HPG_SIZE} * ${HPG_FREE} / 1048576 ))e-3
+    HPG_RSVD_GB=$((10**3* ${HPG_SIZE} * ${HPG_RSVD} / 1048576 ))e-3
+    HPG_USED_GB=$((10**3* ${HPG_SIZE} * (${HPG_TOTAL} - ${HPG_FREE} + ${HPG_RSVD}) / 1048576 ))e-3
+    HPG_FREE_GB=$((10**3* ${HPG_SIZE} * (${HPG_FREE} - ${HPG_RSVD}) / 1048576 ))e-3
+    HPG_USED_PERCENT=$((10**3* ${HPG_USED_GB} * 100 / ${HPG_TOTAL_GB} ))e-3
+    HPG_FREE_PERCENT=$((10**3* ${HPG_FREE_GB} * 100 / ${HPG_TOTAL_GB} ))e-3
+
+    echo "HugePages_Total   GB : ${HPG_TOTAL_GB}"
+    echo "HugePages_RawUsed GB : ${HPG_RAWUSED_GB}"
+    echo "HugePages_RawFree GB : ${HPG_RAWFREE_GB}"
+    echo "HugePages_Rsvd    GB : ${HPG_RSVD_GB}"
+    echo "HugePages_Used    GB : ${HPG_USED_GB}"
+    echo "HugePages_Free    GB : ${HPG_FREE_GB}"
+    echo "HugePages_Used     % : ${HPG_USED_PERCENT}"
+    echo "HugePages_Free     % : ${HPG_FREE_PERCENT}"
+
+    MEM_FREE_GDTOTAL=$((10**3* ${MEM_AVAIL_GB} + ${HPG_FREE_GB} ))e-3
+    MEM_USED_GDTOTAL_PERCENT=$((10**3* (${MEM_USED_GB} - ${HPG_TOTAL_GB} + ${HPG_USED_GB}) * 100 / ${MEM_TOTAL_GB} ))e-3
+    MEM_FREE_GDTOTAL_PERCENT=$((10**3* (${MEM_AVAIL_GB} + ${HPG_FREE_GB}) * 100 / ${MEM_TOTAL_GB} ))e-3
+
+    echo "Memory_Grand_Total_Free  GB : ${MEM_FREE_GDTOTAL} / ${MEM_TOTAL_GB}"
+    echo "Memory_Grand_Total_Used  %  : ${MEM_USED_GDTOTAL_PERCENT}"
+    echo "Memory_Grand_Total_Free  %  : ${MEM_FREE_GDTOTAL_PERCENT}"
+    fi
+
+    [ "${1^^}" == "CSV" ] && echo "$(date "+%d/%m/%Y"),$(hostname -s),${MEM_FREE_GDTOTAL}" || return 0
+}
+
+function MemRpt() {
+    MemRpt_Int
+}
 
 function hugepages_calculator() {
 #!/bin/bash
@@ -744,7 +967,18 @@ esac
 
 echo "Current HugePages Allocated : 2K hugepages = " $(cat /proc/sys/vm/nr_hugepages)
 # End
+}
 
+
+function pshugepage () {
+	HUGEPAGECOUNT=0
+	for num in $(grep 'anon_hugepage.*dirty=' /proc/$@/numa_maps | awk '{print $6}' | sed 's/dirty=//') ; do
+		HUGEPAGECOUNT=$((HUGEPAGECOUNT+num))
+	done
+	echo "NUMA_MAPS : Process $@ using $(( ${HUGEPAGECOUNT} * 2048 / 1048576 )) GB of HugePages : (${HUGEPAGECOUNT} HugePages)"
+
+	HP_SMAPS_GB=$(grep -B 11 'KernelPageSize:     2048 kB' /proc/$@/smaps | grep "^Size:" | awk 'BEGIN{sum=0}{sum+=$2}END{print sum/1048576}')
+	printf "SMAPS     : Process $@ using %.2f GB of HugePages\n" "${HP_SMAPS_GB}"
 }
 
 ## BASH COMPLETION
@@ -1031,7 +1265,15 @@ ${PS1_CURRENT}"
 
 
 #### FG : TODO ####
-## sed 's/[^"]*"\([^"]*\).*/\1/'
+function sudo_function () {
+export -f $1
+su $2 -c "bash -c $1"
+}
+
+## Search in traces :
+#    grep 'ns main err code: 12599' /u01/app/oracle/diag/rdbms/*/*/trace/alert*.log | sort|uniq -c|sort -n
+#    grep -cH 'ns main err code: 12599' /u01/app/oracle/diag/rdbms/*/*/trace/alert*.log | grep -E '_1|_2|11|12|13' | awk -F: '{print $2" "$1}' | sort -n | awk -F/ '{ print $0" : Is Instance Running: "("ps -ef | grep pm[o]n_"$8 | getline $ps); $ps}'
+# sed 's/[^"]*"\([^"]*\).*/\1/'
 #s - tells sed to substitute
 #/ - start of regex string to search for
 #[^"]* - any character that is not ", any number of times. (matching parameter name=)
@@ -1110,6 +1352,40 @@ Content-Type: text/html; charset="us-ascii"
 #	cat ${MAIL_FILE} | /usr/sbin/sendmail -t
 }
 
+
+## PROMPT BEFORE and AFTER a command
+# https://jichu4n.com/posts/debug-trap-and-prompt_command-in-bash/
+# This will run before any command is executed.
+function PreCommand() {
+  if [ -z "$AT_PROMPT" ]; then
+    return
+  fi
+  unset AT_PROMPT
+
+  # Do stuff.
+  echo "Running PreCommand"
+}
+#trap "PreCommand" DEBUG
+
+# This will run after the execution of the previous full command line.  We don't
+# want it PostCommand to execute when first starting a bash session (i.e., at
+# the first prompt).
+FIRST_PROMPT=1
+function PostCommand() {
+  AT_PROMPT=1
+
+  if [ -n "$FIRST_PROMPT" ]; then
+    unset FIRST_PROMPT
+    return
+  fi
+
+  # Do stuff.
+  echo "Running PostCommand"
+}
+#PROMPT_COMMAND="PostCommand"
+
+## Print command before execute
+#trap 'echo "# $BASH_COMMAND"' DEBUG
 
 ## SAR
 #sar -n DEV 1 60 | grep -E 'Average:        IFACE|Average:    bondeth0.3375' | awk '{ print $1"  "$2"  "$5" "$6}' | column -t

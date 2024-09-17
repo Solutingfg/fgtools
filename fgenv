@@ -1,7 +1,151 @@
+
+if [ -n "${DBG}" ]
+then
+echo "0=$0 1=$1 2=$2"
+env | grep FGR
+which fgenv
+locate fgenv
+WORKDIR="${1%/*}"
+echo WORKDIR=$WORKDIR
+fi
+
+# GENERAL
+#WORKDIR="${0%/*}" # Not working when script is not executed but sourced
+WORKDIR=/oracle/FGR
+alias ls='ls --color=auto'
+alias l='ls -ail'
+alias ll='ls -al'
+alias lt='ls -altr'
+alias grep='grep --color=auto'
+
+# PATH
+[ ! $(echo $PATH | grep FGR) ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit:${WORKDIR}:${WORKDIR}/bin:.
+
+# WORKAROUND DEFAULT ENV
+# Default Shell Deconnection Timeout
+[ -n "${TMOUT}" ] && echo -e TMOUT=${TMOUT} unsetting TMOUT; unset TMOUT
+
+# PROMPT
+# Noir 0;30
+# Gris foncé 1;30
+# Bleu 0;34
+# Bleu clair 1;34
+# Vert 0;32
+# Vert clair 1;32
+# Cyan 0;36
+# Cyan clair 1;36
+# Rouge 0;31
+# Rouge clair 1;31
+# Violet 0;35
+# Violet clair 1;35
+# Brun 0;33
+# Jaune 1;33
+# Gris clair 0;37
+# Blanc 1;37
+
+#case ${USER} in
+#    root)
+#        export PS1='\[\033[01;31m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
+#        ;;
+#    oracle)
+#        export PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
+#        ;;
+#esac
+
+#export PS1='\[\e[1;31m\]\u\[\e[0;0m\]@\[\e[1;34m\]\h\[\e[0;0m\]:\w\$ '
+
+#[ -z "$ORACLE_HOME" ] && unset ORAVER || ORAVER=${ORACLE_HOME##*/product/}; ORAVER=${ORAVER%/*}
+#ORAVER=$(ORAVER=${ORACLE_HOME##*/product/}; ORAVER=${ORAVER%/*}; echo $ORAVER)
+
+## HighLight Color
+case $(hostname | grep -ic 'XE') in
+    0)  echo "Env : HPR"
+        HL_COLOR=
+        HL_COLOR2=
+        ;;
+    1)  echo "Env : PRD"
+        HL_COLOR=';41'
+        HL_COLOR2=';47'
+        ;;
+esac
+
+[ "$TERM" = "screen" ] && SCREEN_FLAG="screen:${STY#*.}" || unset SCREEN_FLAG
+case ${USER} in
+    root)
+        #export PS1='\e[1;31m\u\e[0m@\e[1;31m\h\e[0m:\e[1;37m\w\e[0m \e[1;31m$ORACLE_SID $SCREEN_FLAG\e[0m\n[$(date "+%a %m/%d %H:%M:%S")]\e[1;31m\$\e[0m\[ '
+        export PS1='\[\e[1;31${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;31${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER ")\[\e[0m\]\[\e[1;36m\]${SCREEN_FLAG}\[\e[0m\]\n[$(date "+%a %m/%d %H:%M:%S")]\[\e[1;31m\]\$\[\e[0m\] '
+        ;;
+    oracle)
+        export PS1='\[\e[1;32${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER ")\[\e[0m\]\[\e[1;36m\]${SCREEN_FLAG}\[\e[0m\]\n[$(date "+%a %m/%d %H:%M:%S")]\[\e[1;32m\]\$\[\e[0m\] '
+        ;;
+    grid)
+        export PS1='\[\e[1;33${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER ")\[\e[0m\]\[\e[1;36m\]${SCREEN_FLAG}\[\e[0m\]\n[$(date "+%a %m/%d %H:%M:%S")]\[\e[1;32m\]\$\[\e[0m\] '
+        ;;
+    admb*)
+        export PS1='\[\e[1;36${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER ")\[\e[0m\]\[\e[1;36m\]${SCREEN_FLAG}\[\e[0m\]\n[$(date "+%a %m/%d %H:%M:%S")]\[\e[1;32m\]\$\[\e[0m\] '
+        ;;
+    *)
+        export PS1='\[\e[1;33${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w \[\e[1;36m\]${SCREEN_FLAG}\[\e[0m\]\n[$(date "+%a %m/%d %H:%M:%S")]\[\e[1;32m\]\$\[\e[0m\] '
+        ;;
+esac
+
+
+# ORACLE
+#.oracle_profile
+#export NLS_LANG=AMERICAN_AMERICA.WE8MSWIN1252
+export NLS_LANG=AMERICAN_AMERICA.US7ASCII
+export NLS_DATE_FORMAT='DD-MON-YY HH24:MI:SS';
+#export PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
+alias sql='sqlplus / as sysdba'
+alias cdoh='cd \${ORACLE_HOME}'
+alias rlsqlplus='rlwrap -f ~/.rlwrap/sqlplus_completions sqlplus'
+alias rlrman='rlwrap -f ~/.rlwrap/rman_completions rman'
+alias rldgmgrl='rlwrap -f ~/.rlwrap/dgmgrl_completions dgmgrl'
+alias rlsql='rlwrap -f ~/.rlwrap/sqlplus_completions sqlplus / as sysdba'
+alias env11='. ${WORKDIR}/env11.sh'
+alias env12='. ${WORKDIR}/env12.sh'
+
+
+# SCREEN
+# To avoid error : screen Cannot open your terminal '/dev/pts/0' - please check.
+#script /dev/null => bash -c '\''script /dev/null -q -c
+
+alias screen='screen -h 50000'
+alias sc='screen -h 50000'
+alias scls='screen -ls'
+alias scr='screen -r'
+alias scs='screen -S'
+# Workaround when not connected as root : "Cannot open your terminal '/dev/pts/0' - please check."
+alias scr='bash -c '\''script /dev/null -q -c "screen -r ${0#bash}"'\'''
+alias scrd='bash -c '\''script /dev/null -q -c "screen -rd ${0#bash}"'\'''
+alias scrx='bash -c '\''script /dev/null -q -c "screen -rx ${0#bash}"'\'''
+alias scs='bash -c '\''script /dev/null -q -c "screen -h 50000 -S ${0#bash}"'\'''
+alias fgdbg='bash -xc '\''echo "0:$0 ; 0-modded:${0#bash} ; 1:$1"'\'''
+
+export SCREENRC=${WORKDIR}/.screenrc
+# .screenrc
+# Enable mouse scroll
+#termcapinfo xterm* ti@:te@
+
+# Keep scrollback n lines
+#defscrollback 50000
+
+# Enable screen caption
+#hardstatus on
+#hardstatus alwayslastline
+
+# Forward $STY to screen session after a SUDO
+#screen
+#screen $SHELL -c 'screen -X caption always "$STY"'
+#caption always "%{= kc}Screen session on %H (system load: %l) %-28=%{= .m} %Y-%m-%d %0c"
+#caption always "%{= kc}Screen session on %H (system load: %l) %-28=%{= .m} %D %d-%m-%Y %0c"
+
+
+# FUNCTION
 function ts {
 du -sk * | sort -n | awk '
      BEGIN {
-        split("KB,MB,GB,TB", Units, ",");
+        split("KB,MB,GB,TB,PB,EB,B,YB", Units, ",");
      }
      {
         u = 1;
@@ -15,10 +159,87 @@ du -sk * | sort -n | awk '
     '
 }
 
-export PATH=$PATH:/opt/shareddir/bin
+pathmunge () {
+    case ":${PATH}:" in
+        *:"$1":*)
+            ;;
+        *)
+            if [ "$2" = "after" ] ; then
+                PATH=$PATH:$1
+            else
+                PATH=$1:$PATH
+            fi
+    esac
+}
 
-alias screen='screen -h 50000'
-alias sc='screen -h 50000'
-alias scls='screen -ls'
-alias scr='screen -r'
-alias scs='screen -S'
+
+# BASH COMPLETION
+# .inputrc
+bind 'set completion-query-items 300'
+#bind 'set print-completions-horizontally off'
+#set rl_completion_query_items 1000
+
+#bind 'set mark-directories on'
+#bind 'set mark-symlinked-directories on'
+#bind 'set page-completions off'
+#bind 'set show-all-if-ambiguous on'
+#bind 'set visible-stats on'
+
+#alias oenv='bash -xc '\''script /dev/null -q -c "export ORAENV_ASK=NO;  export ORACLE_SID=$0; source /usr/local/bin/oraenv; echo ${ORACLE_SID}:${ORACLE_HOME}"'\'''
+#alias oenv='script /dev/null -q -c "echo export ORAENV_ASK=NO;  export ORACLE_SID=$0; source /usr/local/bin/oraenv; echo ${ORACLE_SID}:${ORACLE_HOME}"'
+#alias oenv='eval export ORACLE_SID='
+#alias oenv='bash -xc 'export ORACLE_SID=$0'''
+#alias oenv='echo export ORACLE_SID=$1'
+
+oenv()
+{
+export ORAENV_ASK=NO
+export ORACLE_SID=$1
+. oraenv >/dev/null
+echo ${ORACLE_SID}:${ORACLE_HOME}
+}
+export -f oenv
+
+_oraenv_completion() {
+    COMPREPLY=()
+    [[ -f /etc/oratab ]] || return 0
+
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    word_list=$(cat /etc/oratab | cut -d':' -f1 | grep -v '#')
+    #word_list=$(grep -v -e "^#\|^ \|^$" /etc/oratab | cut -f1 -d: | paste -sd " " -)
+    COMPREPLY=( $(compgen -W "${word_list}" -- ${cur}) )
+}
+
+complete -F _oraenv_completion oenv srvctl sql.sh dgmgrl.sh
+
+
+_example_complete()
+{
+    local cur_word prev_word word_list
+# COMP_WORDBREAKS+==
+
+    # COMP_WORDS is an array of words in the current command line.
+    # COMP_CWORD is the index of the current word (the one the cursor is
+    # in). So COMP_WORDS[COMP_CWORD] is the current word; we also record
+    # the previous word here, although this specific script doesn't
+    # use it yet.
+    cur_word="${COMP_WORDS[COMP_CWORD]}"
+    prev_word="${COMP_WORDS[COMP_CWORD-1]}"
+
+    # Generate a list words
+    word_list=`ps -ef|grep pm[o]n | cut -d_ -f3`
+
+    # Only perform completion if the current word starts with a dash ('-'),
+    # meaning that the user is trying to complete an option.
+#    if [[ -n ${cur_word} ]] ; then
+        # COMPREPLY is the array of possible completions, generated with
+        # the compgen builtin.
+        COMPREPLY=( $(compgen -W "${word_list}" -- ${cur_word}) )
+#    else
+#        COMPREPLY=()
+#    fi
+    return 0
+}
+
+# Register _example_complete to provide completion for the following commands
+complete -F _example_complete oraup

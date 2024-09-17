@@ -1,6 +1,11 @@
 #!/bin/bash
 
-# GENERAL
+## GENERAL
+
+# WORKAROUND DEFAULT ENV
+# Default Shell Deconnection Timeout
+[ -n "${TMOUT}" ] && echo -e TMOUT=${TMOUT} unsetting TMOUT; unset TMOUT
+
 #WORKDIR="${0%/*}" # Not working when script is not executed but sourced
 #if [ -z "${WORKDIR}" ]
 #then
@@ -10,25 +15,23 @@
     WORKDIR=$(dirname ${CURRENT_DIR})
     [ -d "${WORKDIR}/../bin" ] && WORKDIR=$(dirname ${WORKDIR})
 #fi
-#EXADATA_WORKDIR=/oracle/tmp
-#VIOLET_WORKDIR=/tech/FGR
 
 BINDIR=${WORKDIR}/bin
 LIBDIR=${WORKDIR}/lib
 [ $(grep -c "${BINDIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${BINDIR}:.
 [ $(grep -c "${LIBDIR}" <<< ${LD_LIBRARY_PATH}) -eq 0 ] && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${LIBDIR}
+[ $(grep -c "${WORKDIR}" <<< ${MANPATH}) -eq 0 ] && export MANPATH="$(manpath -g):${WORKDIR}/usr/share/man"
+
 
 ## IF EXADATA
 if [ $(hostname | grep "dbadm") ]
 then
   PLATFORM=EXADATA
-  echo "Environnement ${PLATFORM}"
-  #WORKDIR=${EXADATA_WORKDIR}
+  echo "Plateforme : ${PLATFORM}"
   [ ! -d "/prsyslib" ] && [ $(grep -c "/oracle/scripts" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit
 else
   PLATFORM=LINUX
-  echo "Environnement VIOLET (Hors Exadata)"
-  #WORKDIR=${VIOLET_WORKDIR}
+  echo "Plateforme : VIOLET (Hors Exadata)"
   #export PATH=$PATH:${WORKDIR}/bin:.
   alias fgenv=". ${LIBDIR}/fgenv"
   [ ! -f /etc/profile.d/zz-fgenv.sh ] && [ $(id -u) -eq 0 ] && echo ln -s ${LIBDIR}/fgenv /etc/profile.d/zz-fgenv.sh
@@ -36,6 +39,7 @@ else
 fi
 
 
+## DEBUG
 if [ -n "${DBG}" ]
 then
 echo "0=$0 1=$1 2=$2"
@@ -51,25 +55,91 @@ sysctl net.ipv4.tcp_keepalive_time net.ipv4.tcp_keepalive_intvl net.ipv4.tcp_kee
 fi
 
 
-alias ls='ls --color=auto'
-alias l='ls -ail'
-alias ll='ls -al'
-alias lt='ls -altr'
-alias grep='grep --color=auto'
-alias psg="ps aux | grep -v grep | grep -i"
-#alias dmesg='dmesg -H'
-alias iperf3_stop='pkill -ecnf "iperf3 -sD"'
-alias vim='vim -u ${LIBDIR}/.vimrc'
-alias vi=vim
-export VIMRUNTIME=${LIBDIR}/share/vim/vim74
-alias ssh='ssh -o ServerAliveInterval=30'
-alias nmon=${BINDIR}/nmon
-alias nmon14g=${BINDIR}/nmon14g_x86_rhel7
+## PROMPT
+# Noir 0;30        # Blanc 1;37
+# Gris foncé 1;30  # Gris clair 0;37
+# Bleu 0;34        # Bleu clair 1;34
+# Vert 0;32        # Vert clair 1;32
+# Cyan 0;36        # Cyan clair 1;36
+# Rouge 0;31       # Rouge clair 1;31
+# Violet 0;35      # Violet clair 1;35
+# Brun 0;33
+# Jaune 1;33
 
-# WORKAROUND DEFAULT ENV
-# Default Shell Deconnection Timeout
-[ -n "${TMOUT}" ] && echo -e TMOUT=${TMOUT} unsetting TMOUT; unset TMOUT
+#case ${USER} in
+#    root)
+#        export PS1='\[\033[01;31m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
+#        ;;
+#    oracle)
+#        export PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
+#        ;;
+#esac
 
+#export PS1='\[\e[1;31m\]\u\[\e[0;0m\]@\[\e[1;34m\]\h\[\e[0;0m\]:\w\$ '
+
+#[ -z "$ORACLE_HOME" ] && unset ORAVER || ORAVER=${ORACLE_HOME##*/product/}; ORAVER=${ORAVER%/*}
+#ORAVER=$(ORAVER=${ORACLE_HOME##*/product/}; ORAVER=${ORAVER%/*}; echo $ORAVER)
+
+## HighLight Color
+case $(hostname --fqdn | cut -d'.' -f2- | tr '[:upper:]' '[:lower:]') in
+    *prdres)  echo "Environnement : PRD"
+        HL_COLOR=';41'
+        HL_COLOR2=';47'
+    ;;
+    *intres)  echo "Environnement : HPR (INT)"
+        HL_COLOR=
+        HL_COLOR2=
+    ;;
+    *mapres)  echo "Environnement : HPR (MAP)"
+        HL_COLOR=
+        HL_COLOR2=
+    ;;
+esac
+
+## Screen flag
+#[ "${TERM}" = "screen" ] && SCREEN_FLAG=" screen:${STY#*.}" || unset SCREEN_FLAG
+[ "${TERM}" = "screen" ] && [ -z "${TMUX}" ] && SCREEN_FLAG=$(echo -e " \e[1;36mscreen:${STY#*.}\e[0m") || unset SCREEN_FLAG
+## Tmux flag
+[[ "${TERM}" =~ "screen" ]] && [ -n "${TMUX}" ] && TMUX_FLAG=$(echo -e " \e[1;32mtmux:${TMUX/*tmux/tmux}\e[0m") || unset TMUX_FLAG
+## Software Collection flag
+[ -n "${X_SCLS}" ] && SCL_FLAG=$(echo -e " \e[1;35mscl:${X_SCLS}\e[0m") || unset SCL_FLAG
+## Oracle Version
+#[ "${PLATFORM}" == "EXADATA" ] && ORA_VERSION='$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER")' && GRID_VERSION='$(ORAVER=${ORACLE_HOME##*/u01/app/};ORAVER=${ORAVER%/*};echo "$ORAVER")'
+[ "${PLATFORM}" == "EXADATA" ] && ORA_VERSION='$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER")' && GRID_VERSION='$(ORAVER=${ORACLE_HOME##*/u01/app/};echo "$ORAVER")'
+[ "${PLATFORM}" != "EXADATA" ] && ORA_VERSION='$(ORAVER=${ORACLE_HOME##*/tech/oracle/dbhome/};echo "$ORAVER")' && GRID_VERSION='$(ORAVER=${ORACLE_HOME##*/tech/oracle/grid/};echo "$ORAVER")'
+## FG : Decommenter pour avoir la date dans le prompt #DATE_PS1='[$(date "+%a %m/%d %H:%M:%S")]'
+
+case ${USER} in
+    root)
+        #export PS1='\e[1;31m\u\e[0m@\e[1;31m\h\e[0m:\e[1;37m\w\e[0m \e[1;31m$ORACLE_SID $SCREEN_FLAG\e[0m\n[$(date "+%a %m/%d %H:%M:%S")]\e[1;31m\$\e[0m\[ '
+        #export PS1='\[\e[1;31${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;31${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${ORA_VERSION})\[\e[0m\]\[\e[1;36m\]${SCREEN_FLAG}${SCL_FLAG}\[\e[0m\]\n[$(date "+%a %m/%d %H:%M:%S")]\[\e[1;31m\]\$\[\e[0m\] '
+        export PS1='\[\e[1;31${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;31${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${ORA_VERSION})\[\e[0m\]${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\[\e[1;31m\]\$\[\e[0m\] '
+        ;;
+    oracle)
+        export PS1='\[\e[1;32${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${ORA_VERSION})\[\e[0m\]${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\[\e[1;32m\]\$\[\e[0m\] '
+        ;;
+    grid)
+        export PS1='\[\e[1;33${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${GRID_VERSION})\[\e[0m\]${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\[\e[1;32m\]\$\[\e[0m\] '
+        ;;
+    postgres)
+        export PS1='\[\e[1;33${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${PGS_INSTANCE} \[\e[1;33m\]${PGS_VERSION}\[\e[0m\]${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\[\e[1;32m\]\$\[\e[0m\] '
+        ;;
+    admb*)
+        export PS1='\[\e[1;36${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${ORA_VERSION})\[\e[0m\]${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\[\e[1;32m\]\$\[\e[0m\] '
+        ;;
+    *)
+        export PS1='\[\e[1;35${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] ${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\[\e[1;32m\]\$\[\e[0m\] '
+        ;;
+esac
+
+## https://www.thegeekstuff.com/2008/09/bash-shell-take-control-of-ps1-ps2-ps3-ps4-and-prompt_command/
+# PS1 – Default interaction prompt : Default "\s-\v\$"
+# PS2 – Continuation interactive prompt : Default '>'
+#PS2="continue->"
+# PS3 – Prompt used by “select” inside shell script
+#PS3="Select a day (1-4): "
+# PS4 – Used by “set -x” to prefix tracing output : Default '+'
+export PS4='$0.$LINENO+ '
 
 ## COLOR
 function display_all_colors_16()
@@ -87,82 +157,8 @@ for clbg in {40..47} {100..107} 49 ; do
 done
 }
 
-# PROMPT
-# Noir 0;30
-# Gris foncé 1;30
-# Bleu 0;34
-# Bleu clair 1;34
-# Vert 0;32
-# Vert clair 1;32
-# Cyan 0;36
-# Cyan clair 1;36
-# Rouge 0;31
-# Rouge clair 1;31
-# Violet 0;35
-# Violet clair 1;35
-# Brun 0;33
-# Jaune 1;33
-# Gris clair 0;37
-# Blanc 1;37
 
-#case ${USER} in
-#    root)
-#        export PS1='\[\033[01;31m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
-#        ;;
-#    oracle)
-#        export PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
-#        ;;
-#esac
-
-#export PS1='\[\e[1;31m\]\u\[\e[0;0m\]@\[\e[1;34m\]\h\[\e[0;0m\]:\w\$ '
-
-#[ -z "$ORACLE_HOME" ] && unset ORAVER || ORAVER=${ORACLE_HOME##*/product/}; ORAVER=${ORAVER%/*}
-#ORAVER=$(ORAVER=${ORACLE_HOME##*/product/}; ORAVER=${ORAVER%/*}; echo $ORAVER)
-
-## HighLight Color
-case $(hostname | grep -ic 'XE') in
-    0)  echo "Env : HPR"
-        HL_COLOR=
-        HL_COLOR2=
-        ;;
-    1)  echo "Env : PRD"
-        HL_COLOR=';41'
-        HL_COLOR2=';47'
-        ;;
-esac
-
-## Screen
-[ "${TERM}" = "screen" ] && SCREEN_FLAG=" screen:${STY#*.}" || unset SCREEN_FLAG
-## Software Collection
-[ -n "${X_SCLS}" ] && SCL_FLAG=" scl:${X_SCLS}" || unset SCL_FLAG
-## Oracle Version
-[ -n "${EXADATA_ENV}" ] && ORA_VERSION='$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER")' && GRID_VERSION='$(ORAVER=${ORACLE_HOME##*/u01/app/};echo "$ORAVER")'
-[ -z "${EXADATA_ENV}" ] && ORA_VERSION='$(ORAVER=${ORACLE_HOME##*/tech/oracle/dbhome/};echo "$ORAVER")' && GRID_VERSION='$(ORAVER=${ORACLE_HOME##*/tech/oracle/grid/};echo "$ORAVER")'
-
-case ${USER} in
-    root)
-        #export PS1='\e[1;31m\u\e[0m@\e[1;31m\h\e[0m:\e[1;37m\w\e[0m \e[1;31m$ORACLE_SID $SCREEN_FLAG\e[0m\n[$(date "+%a %m/%d %H:%M:%S")]\e[1;31m\$\e[0m\[ '
-        export PS1='\[\e[1;31${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;31${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${ORA_VERSION})\[\e[0m\]\[\e[1;36m\]${SCREEN_FLAG}${SCL_FLAG}\[\e[0m\]\n[$(date "+%a %m/%d %H:%M:%S")]\[\e[1;31m\]\$\[\e[0m\] '
-        ;;
-    oracle)
-        export PS1='\[\e[1;32${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${ORA_VERSION})\[\e[0m\]\[\e[1;36m\]${SCREEN_FLAG}${SCL_FLAG}\[\e[0m\]\n[$(date "+%a %m/%d %H:%M:%S")]\[\e[1;32m\]\$\[\e[0m\] '
-        ;;
-    grid)
-        export PS1='\[\e[1;33${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${GRID_VERSION})\[\e[0m\]\[\e[1;36m\]${SCREEN_FLAG}${SCL_FLAG}\[\e[0m\]\n[$(date "+%a %m/%d %H:%M:%S")]\[\e[1;32m\]\$\[\e[0m\] '
-        ;;
-    postgres)
-        export PS1='\[\e[1;33${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${PGS_INSTANCE} \[\e[1;33m\]${PGS_VERSION}\[\e[0m\]\[\e[1;36m\]${SCREEN_FLAG}${SCL_FLAG}\[\e[0m\]\n[$(date "+%a %m/%d %H:%M:%S")]\[\e[1;32m\]\$\[\e[0m\] ' 
-        ;;
-    admb*)
-        export PS1='\[\e[1;36${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${ORA_VERSION})\[\e[0m\]\[\e[1;36m\]${SCREEN_FLAG}${SCL_FLAG}\[\e[0m\]\n[$(date "+%a %m/%d %H:%M:%S")]\[\e[1;32m\]\$\[\e[0m\] '
-        ;;
-    *)
-        export PS1='\[\e[1;35${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w \[\e[1;36m\]${SCREEN_FLAG}${SCL_FLAG}\[\e[0m\]\n[$(date "+%a %m/%d %H:%M:%S")]\[\e[1;32m\]\$\[\e[0m\] '
-        ;;
-esac
-
-
-# ORACLE
+## ORACLE
 if [ "${LOGNAME}" == "oracle" -o "${LOGNAME}" == "grid" ]
 then
     #.oracle_profile
@@ -210,9 +206,277 @@ alias setoh='. ${LIBDIR}/setoh.sh'
 alias env11='. ${LIBDIR}/env11.sh'
 alias env12='. ${LIBDIR}/env12.sh'
 
-## COMMON
+
+function loopdb(){
+  unset DB_FILTER VERBOSE DEBUG
+  SQL_COLLECTION=${1} ; shift 1
+
+  for argv in $* ; do
+    case $argv in
+      -h*)  Usage;;
+      -d)  DB_FILTER=$2 ; if [ "$2" = "" ]; then Usage ; else shift 2 ; fi ;;
+      -v*) VERBOSE=YES ;  shift 1 ;;
+      --debug|-dbg) DEBUG=YES ;  shift 1 ;;
+      -f)  FORCE=1 ; shift 1 ;;
+      #-exemple_1)    export EX=YES ; shift 1 ;;
+      #-exemple_2*)   export EX=$2 ;  if [ "$2" = "" ]; then Usage ; else shift 2 ; fi ;;
+    esac
+  done
+
+function SQL_PROCESS() {
+echo $1
+SQL=$(cat <<-\EOF
+echo -e $1
+EOF
+)
+echo SQL=$SQL
+}
+
+## Replace occurrences of $ with \$ to prevent variable substitution:
+# filename="${filename//$/\\$}"
+## Print dollar : HEXA or OCTAL
+# echo -e '\x24' or # echo -e '\044'
+
+  COLOR_OK='\033[30;42m'; COLOR_KO="\033[1;37;41m"; COLOR_WARN="\033[30;43m"; COLOR_CMD="\033[1;37;44m"; COLOR_STD="\033[0;0m"; COLOR_TITLE="\033[30;47m"; COLOR_RESULT="\033[30;46m"
+  #alias echo='echo -e'
+
+  SQL_PARAM="WHENEVER SQLERROR EXIT SQL.SQLCODE\nset head off feed off verify off echo off pages 0 trimout on trimspool on termout off wrap off set feed only\n"
+  SQL_PARAM="WHENEVER SQLERROR EXIT SQL.SQLCODE\nset head off pages 0 trimout on\n"
+
+  DB_VERSION="SELECT VERSION FROM PRODUCT_COMPONENT_VERSION WHERE PRODUCT LIKE '%Oracle Database%';"
+  DBID='select dbid from v$database;'
+  IS_DTG="show parameter dg_broker_start"
+  IS_RAC="select VALUE from v\$parameter where upper(NAME) = 'CLUSTER_DATABASE_INSTANCES';"
+  IS_RAC="select count(*) NBR_INSTANCES from gv\$instance;"
+  IS_RAC="select count(*) FROM v\$active_instances;"
+  RAC_TYPE="select DECODE(INSTR(instance_name,'_'),0,'RAC','RACONE') RAC_TYPE from v\$instance;"
+    RAC_TYPE_HEADER="RAC_TYPE CLUSTER_DATABASE_INSTANCES COUNT_GV\$INSTANCE"
+  NB_INST="select count(*) from gv\$instance;"
+  DIFF_INST_THREAD="select (select DECODE(count(*),1,2,count(*)) FROM v\$active_instances) - (select nvl(count(distinct(THREAD#)),0) from v\$standby_log) DIFF_INST_THREAD from dual;"
+  CDI="select VALUE from v\$parameter where upper(NAME) = 'CLUSTER_DATABASE_INSTANCES';"
+  FORCE_LOGGING="select FORCE_LOGGING from v\$database;"
+  FIX_CONTROL_CHECK="show parameter _fix_control"
+  LAST_LOGIN="select to_char(max(LAST_LOGIN),'dd/mm/yyyy') from dba_users where username not in ('ANONYMOUS','APEX_030200','APEX_PUBLIC_USER','APPQOSSYS','BI','CTXSYS','DBSNMP','DIP','EXFSYS','FLOWS_FILES','HR','IX','MDDATA','DMSYS','MDSYS','MGMT_VIEW','OE','OLAPSYS','ORACLE_OCM','ORDDATA','ORDPLUGINS','ORDSYS','OUTLN','OWBSYS','OWBSYS_AUDIT','PM','TSMSYS','SCOTT','SH','SI_INFORMTN_SCHEMA','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYS','SYSMAN','SYSTEM','WMSYS','XDB','XS$NULL','SYSBACKUP','SYSKM','SYSDG','AUDSYS','GSMCATUSER','GSMUSER','GSMADMIN_INTERNAL','PERFSTAT','OJVMSYS');"
+  DB_SIZE="select sum(bytes)/1048576 as MB, round(sum(bytes)/1048576/1024,1) as GB from dba_data_files;"
+    DB_SIZE_HEADER="MB   GB"
+  DBF_SIZE="select round(sum(df.bytes/1073741824),0) as DBF_GB from v\$datafile df, v\$tablespace ts where df.ts#=ts.ts# and ts.NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS');"
+  SGA_DBF_USAGE="COLUMN SGA_USAGE FORMAT A40
+  SELECT
+  'SGA_TARGET         GB : '||SGA_TARGET_GB
+--  ||chr(10)||'Pool               GB : '||POOL_USED_GB
+--  ||chr(10)||'Shared Pool        GB : '||SHARED_POOL_GB
+  ||chr(10)||'Shared Pool Used   GB : '||SHARED_POOL_USED_GB
+--  ||chr(10)||'Buffer Cache       GB : '||BUFFER_CACHE_GB
+  ||chr(10)||'Buffer Cache Used  GB : '||BUFFER_CACHE_USED_GB
+  ||chr(10)||'SGA_FREE           GB : '||(SGA_TARGET_GB-BUFFER_CACHE_USED_GB-SHARED_POOL_USED_GB)
+  ||chr(10)||'SGA_FREE_PERCENT    % : '||round(((SGA_TARGET_GB-BUFFER_CACHE_USED_GB-SHARED_POOL_USED_GB)*100/SGA_TARGET_GB),1)
+  ||chr(10)||'DBF_SIZE           GB : '||DBF_SIZE_GB
+--  ||chr(10)||'DBF_SIZE_FREE      GB : '||DBF_SIZE_FREE_GB
+  ||chr(10)||'DBF_SIZE_USED      GB : '||(DBF_SIZE_GB - DBF_SIZE_FREE_GB)
+    FROM
+    (
+    SELECT round(sum(number_of_blocks*db_block_size/1073741824),1) BUFFER_CACHE_USED_GB
+    , SGA_TARGET_GB
+    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool like '%pool%') POOL_USED_GB
+    ,(select round(bytes/1073741824,1) GB from v\$sgainfo where name='Shared Pool Size') SHARED_POOL_GB
+    ,(select round(sum(bytes/1073741824),1) GB from v\$sgastat where pool ='shared pool') SHARED_POOL_USED_GB
+    ,(select round(bytes/1073741824,1) from v\$sgastat where name = 'buffer_cache') BUFFER_CACHE_GB
+--    ,(select round(sum(df.bytes/1073741824),0) from v\$datafile df, v\$tablespace ts where df.ts#=ts.ts# and ts.NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS')) DBF_SIZE_GB
+    ,(select round(sum(bytes/1073741824),0) from dba_data_files where TABLESPACE_NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS')) DBF_SIZE_GB
+--    ,(select round(sum(user_bytes/1073741824),0) from dba_data_files where TABLESPACE_NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS')) DBF_SIZE_GB
+    ,(select round(sum(bytes/1073741824),0) from dba_free_space where TABLESPACE_NAME not in ('SYSTEM','SYSAUX','UNDOTBS1','UNDOTBS2','UNDOTBS3','TEMP','USERS')) DBF_SIZE_FREE_GB
+      FROM
+      (
+      SELECT o.object_name, COUNT(*) number_of_blocks
+      ,(SELECT value FROM V\$PARAMETER WHERE name = 'db_block_size') db_block_size
+    ,(select round(value/1073741824,1) GB from v\$parameter where name='sga_target') SGA_TARGET_GB
+        FROM DBA_OBJECTS o, V\$BH bh
+       WHERE o.data_object_id = bh.OBJD
+         AND o.owner != 'SYS'
+       GROUP BY o.object_Name
+       --ORDER BY COUNT(*)
+      )
+    GROUP BY SGA_TARGET_GB
+    )
+;"
+
+  [ ! -z "${DEBUG}" ] && (PROMPT_COMMAND_PREV=$PROMPT_COMMAND; unset PROMPT_COMMAND) && set -x
+
+  HEADER=${SQL_COLLECTION}
+  [[ "${VERBOSE}" == "YES" ]] && HEADER="${SQL_COLLECTION} : ${!SQL_COLLECTION}"
+#echo ${!SQL_COLLECTION}
+#echo ${!SQL_COLLECTION//$/\\$}
+#echo ${!SQL_COLLECTION//\"/}
+  #QUERYRAW=$(set -f; echo "${!SQL_COLLECTION//\"/}" | sed 's:\\$:\\\$:g'; set +f)    QUERY2EXEC="${SQL_PARAM}${QUERYRAW}"
+  #QUERYRAW=${!SQL_COLLECTION//$/\\$}
+  #QUERYRAW=${!SQL_COLLECTION//\"/}    QUERY2EXEC="${SQL_PARAM}${QUERYRAW}"
+  QUERYRAW="${!SQL_COLLECTION}"    QUERY2EXEC="${SQL_PARAM}${QUERYRAW}"
+
+  for SID in $(ps -eo args | grep pm[o]n_"${DB_FILTER}" | cut -d'_' -f3- | grep -v "^+\|^-\|^$\|^DBA" | sort); do . oraenv <<<${SID}>/dev/null
+    ORA_VERSION=$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER")
+    #[[ ${ORA_VERSION} =~ 11.2 ]] && continue
+    echo -e "\n${COLOR_TITLE}${ORACLE_SID} : ${ORA_VERSION}${COLOR_STD}" # : ${COLOR_CMD}${QUERYRAW//\\n/ & }${COLOR_STD}"
+    QUERY_OUTPUT=$(echo -e "${QUERY2EXEC}" | sqlplus -S / as sysdba)
+    [[ "${QUERY_OUTPUT}" =~ ORA-|TNS-|RMAN-|-bash|KO ]] && OUTCOLOR=${COLOR_KO} || OUTCOLOR=${COLOR_STD}
+    [[ "${QUERY_OUTPUT}" =~ "OK" ]] && OUTCOLOR=${COLOR_OK}
+    [[ -z "${VERBOSE}" ]] && echo -e "${COLOR_RESULT}${HEADER}${COLOR_STD}"
+    [[ "${VERBOSE}" == "YES" ]] && echo -e "${COLOR_RESULT}${HEADER}${COLOR_STD}"
+    [[ -z "${VERBOSE}" ]] && echo -e "${OUTCOLOR}${QUERY_OUTPUT}${COLOR_STD}"
+    [[ "${VERBOSE}" == "YES" ]] && (set -f; echo -e "${OUTCOLOR:-${COLOR_RESULT}}$(echo ${QUERY_OUTPUT})${COLOR_STD}"; set +f);
+  done
+
+  [ ! -z "${DEBUG}" ] && PROMPT_COMMAND=$PROMPT_COMMAND_PREV && set +x
+}
+
+
+function oralisthome () {
+printf "%6s %-20s %-80s\n" "PID" "NAME" "ORACLE_HOME"
+pgrep -af _pmon_ |
+  while read pid pname  y ; do
+    printf "%6s %-20s %-80s\n" $pid $pname `ls -l /proc/$pid/exe | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//' | sort | uniq`
+  done
+}
+
+function oralistcnx () {
+ps -eo "args" | grep L[O]CAL=NO | sort | uniq -c
+}
+
+
+function lsnGetservice_OLD () {
+LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | sed 's/.*lsnr \(.*\) -no.*/\1/')
+for LSN_NAME in ${LSN_NAME_LIST}; do
+    cmd="lsnrctl status ${LSN_NAME} | grep -m 3 ${1}.*_APPLI"
+    host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's/.*\(.*HOST=.*\)\(PORT=.*\)/Host=\1 Port=\2/')
+    echo "${LSN_NAME} :"
+    echo ${cmd}
+    eval ${cmd}
+    #eval ${cmd} | highlight cyan 'lsnrctl status'
+done
+}
+
+function lsnGetservice () (
+echo "Usage : Connected as 'grid' ${FUNCNAME} <TRI>.*X1"
+## TODO : sudo -u grid || ssh grid@localhost + oraenv +ASM
+
+    MainFunc () {
+    LSN_SERVICE=${1:-.}
+    LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | sed 's/.*lsnr \(.*\) -no.*/\1/')
+    for LSN_NAME in ${LSN_NAME_LIST}; do
+        #cmd="lsnrctl status ${LSN_NAME} | grep -m 3 ${LSN_SERVICE}.*_APPLI"
+        cmd="lsnrctl status ${LSN_NAME} | grep ${LSN_SERVICE}"
+        host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's/.*\(.*HOST=.*\))(\(PORT=.*\))))/\1 \2/')
+        echo -e "\e[7;40;37m${LSN_NAME}\e[0m : "${host_port}
+        #echo ${cmd}
+        #eval ${cmd}
+        RESULT="$(eval ${cmd})"
+        echo -e "\e[1;32m${RESULT}\e[0m"
+        #eval ${cmd} | highlight cyan 'lsnrctl status'
+    done
+    }
+
+#set -x
+    if [ "${LOGNAME}" == "grid" ]; then
+        if [[ ! "${ORACLE_SID}" =~ "ASM" ]]; then HOST=$(hostname -s); export ORACLE_SID="+ASM${HOST:0,-1}"; export ORAENV_ASK=NO; . oraenv>/dev/null; fi
+        MainFunc $1
+    else
+        export -f MainFunc
+        su grid -c "bash -c HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv>/dev/null; MainFunc $1"
+        #su grid -c "bash -c echo "HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv; echo ${ORACLE_SID}:${ORACLE_HOME}; MainFunc $1""
+        #sudo -u grid bash -c
+        #su grid -c "bash -c MainFunc $1"
+    fi
+#set +x
+)
+
+function asmdu() {
+# https://blog.pythian.com/amcmd-better-du/
+    D=$1
+    if [[ -z "$D" ]]; then
+        echo "Please provide a directory !"
+        return 1
+        #exit 1
+    fi
+
+    (for DIR in $(asmcmd ls ${D}); do
+        echo ${DIR} $(asmcmd du ${D}/${DIR} | tail -1)
+    done) | awk -v D="$D" '
+    BEGIN { printf("\n\t%30s\n\n", D " subdirectories size");
+    printf("%25s%16s%16s\n", "Subdir", "Used MB", "Mirror MB");
+    printf("%25s%16s%16s\n", "------", "-------", "---------");
+    }
+    { printf("%15s%16s%16s\n", $1, $2, $3);
+    use += $2;
+    mir += $3;
+    }
+    END { printf("\n\n%25s%16s%16s\n", "------", "-------", "---------");
+    printf("%25s%16s%16s\n\n", "Total", use, mir);
+    }'
+}
+
+
+function ASMvsDB_DIFF(){
+    [[ "${LOGNAME}" != "grid" ]] && echo "You must be connected as grid" && return 1
+    DG_DATA=DATAC1
+    DG_RECO=RECOC1
+
+    echo "DG_DATA = ${DG_DATA}"
+    echo "DG_RECO = ${DG_RECO}"
+    echo "CRS_DBUNAME = srvctl config"
+
+    ASMDIR_DATA=$(asmcmd ls ${DG_DATA} | sort | grep -E 'D1|D2' | sed s:/::)
+    ASMDIR_RECO=$(asmcmd ls ${DG_RECO} | sort | grep -E 'D1|D2' | sed s:/::)
+    CRS_DBUNAME=$(srvctl config | grep -E 'D1|D2')
+
+    echo -e "\nDifference between :\nASMDIR_DATA vs ASMDIR_RECO"
+    diff --suppress-common-lines -yW 27 <(echo "${ASMDIR_DATA}") <(echo "${ASMDIR_RECO}") | grep -v ','
+    unset DIFF_COUNT; DIFF_COUNT=$(diff <(echo "${ASMDIR_DATA}") <(echo "${ASMDIR_RECO}") | grep -vc ",")
+    [ "${DIFF_COUNT}" -eq 0 ] && echo "No difference : OK" #|| echo "Difference detected \"${DIFF_COUNT}\" : KO"
+
+    echo -e "\nDifference between :\nASMDIR_DATA vs CRS_DBUNAME"
+    diff --suppress-common-lines -yW 27 <(echo "${ASMDIR_DATA}") <(echo "${CRS_DBUNAME}") | grep -v ','
+    unset DIFF_COUNT; DIFF_COUNT=$(diff <(echo "${ASMDIR_DATA}") <(echo "${CRS_DBUNAME}") | grep -vc ",")
+    [ "${DIFF_COUNT}" -eq 0 ] && echo "No difference : OK" #|| echo "Difference detected \"${DIFF_COUNT}\" : KO"
+
+    echo -e "\nDifference between :\nASMDIR_RECO vs CRS_DBUNAME"
+    diff --suppress-common-lines -yW 27 <(echo "${ASMDIR_RECO}") <(echo "${CRS_DBUNAME}") | grep -v ','
+    unset DIFF_COUNT; DIFF_COUNT=$(diff <(echo "${ASMDIR_RECO}") <(echo "${CRS_DBUNAME}") | grep -vc ",")
+    [ "${DIFF_COUNT}" -eq 0 ] && echo "No difference : OK" #|| echo "Difference detected \"${DIFF_COUNT}\" : KO"
+}
+
+
+function sudo_function () {
+export -f $1
+su username -c "bash -c $1"
+}
+
+
+## ALIAS COMMON
 alias fgdbg='bash -xc '\''echo "0:$0 ; 0-modded:${0#bash} ; 1:$1"'\'''
+alias yumrepo="egrep -Hi '(^\[|^enabled)' /etc/yum.repos.d/*"
+alias resetenv='env -i PS1="[\u@\h \W]\$ " bash --norc --noprofile'
+
+## ALIAS SYSTEM
+alias ls='ls --color=auto'
+alias l='ls -ail'
+alias ll='ls -al'
+alias lt='ls -altr'
+alias lh='ls -alh'
+alias lht='ls -alhtr'
+alias grep='grep --color=auto'
+#alias echopath='echo $PATH | tr : \\n'
+alias echopath='echo -e ${PATH//:/\\n}'
+alias psg="ps aux | grep -v grep | grep -i"
+#alias dmesg='dmesg -H'
+alias vim='vim -u ${LIBDIR}/.vimrc'
+alias vi=vim
+[ ! -d '/usr/share/vim/vim74' ] && export VIMRUNTIME=${LIBDIR}/share/vim/vim74
+alias ssh='ssh -o ServerAliveInterval=30'
 alias netbreakdown="netstat -nat | awk '{print $6}' | sort | uniq -c | sort -n"
+
+## ALIAS APPS
+alias iperf3_stop='pkill -ecnf "iperf3 -sD"'
+alias nmon=${BINDIR}/nmon
+alias nmon14g=${BINDIR}/nmon14g_x86_rhel7
 
 ## SCREEN
 # To avoid error : screen Cannot open your terminal '/dev/pts/0' - please check.
@@ -249,36 +513,31 @@ export SCREENRC=${LIBDIR}/.screenrc
 #caption always "%{= kc}Screen session on %H (system load: %l) %-28=%{= .m} %D %d-%m-%Y %0c"
 
 
-# FUNCTION
-
-function oralisthome () {
-printf "%6s %-20s %-80s\n" "PID" "NAME" "ORACLE_HOME"
-pgrep -af _pmon_ |
-  while read pid pname  y ; do
-    printf "%6s %-20s %-80s\n" $pid $pname `ls -l /proc/$pid/exe | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//' | sort | uniq`
-  done
-}
-
-function oralistcnx () {
-ps -eo "args" | grep LOCAL=NO | sort | uniq -c
-}
-
-function lsnGetservice () {
-LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | sed 's/.*lsnr \(.*\) -no.*/\1/')
-for LSN_NAME in ${LSN_NAME_LIST}; do
-    cmd="lsnrctl status ${LSN_NAME} | grep -m 3 ${1}.*_APPLI"
-    host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's/.*\(.*HOST=.*\)\(PORT=.*\)/Host=\1 Port=\2/')
-    echo "${LSN_NAME} :"
-    echo ${cmd}
-    eval ${cmd}
-    #eval ${cmd} | highlight cyan 'lsnrctl status'
-done
-}
-
-
+## FUNCTIONS
 #du -sk ./* | /usr/bin/sort -n | /usr/bin/awk 'BEGIN{ pref[1]="K"; pref[2]="M"; pref[3]="G";} { total = total + $1; x = $1; y = 1; while( x > 1024 ) { x = (x + 1023)/1024; y++; } printf("%g%s\t%s\n",int(x*10)/10,pref[y],$2); } END { y = 1; while( total > 1024 ) { total = (total + 1023)/1024; y++; } printf("Total: %g%s\n",int(total*10)/10,pref[y]); }'
 #du -sk * | awk '{ total = total + $1 } END { print total }'
 #ls -l | awk '{sum += $5} END {print sum}'
+
+## TMUX
+alias tmux='tmux -f ${LIBDIR}/.tmux.conf'
+alias tms='tmux new -s'
+alias tma='tmux attach'
+alias tmls='tmux ls'
+alias tmkill='tmux kill-session -t'
+alias tmkillall="tmux ls | grep : | cut -d. -f1 | awk '{print substr($1, 0, length($1)-1)}' | xargs kill"
+alias tmkillall2='while [ $? -ne 1 ]; do tmux kill-session; done'
+
+
+## ANSIBLE
+export ANSIBLE_CONFIG=~/ansible/ansible.cfg
+ANSIBLE_HOST_KEY_CHECKING=False
+export ANSIBLE_REMOTE_USER=root
+#export ANSIBLE_INVENTORY=~/ansible/inventory/
+#export ANSIBLE_HOST_KEY_CHECKING=False
+#export ANSIBLE_LIBRARY=${MYDIR}/../library
+#export ANSIBLE_MODULE_UTILS=${MYDIR}/../module_utils
+#export ANSIBLE_VAULT_PASSWORD_FILE=~/.vault_pass.txt
+
 
 function dufg {
 ARG1=${1:-*}
@@ -353,6 +612,7 @@ function sizebyMonthfr () { find ./ -type f -printf '%TY-%Tm %s\n' | awk '{sum[$
 
 #time find -type f -ctime +90 | xargs -ifile du file | cut -d'/' -f1,2 | awk '{sum[$2] += $1/1024; total += $1/1048576} END { for (dir in sum){printf "%-30s MB %d\n", dir, sum[dir];} printf "Total MB %d\n", total; }' | sort -nk3
 
+
 adGetuserInfo () {
     [ -z "$1" ] && echo Arg 1 is Required && return 1
     [ -n "$2" ] && GREP_GROUP="| grep -i $2"
@@ -362,6 +622,7 @@ adGetuserInfo () {
 
 adGetgroupInfo () {
     [ -z "$1" ] && echo Arg 1 is Required && return 1
+    echo $1 GID:$(getent group $1 | cut -d: -f3)
     for aduser in $(getent group $1 | cut -d: -f4 | sed "s/,/\n/g" | sort)
     do
         [ -z "$2" ] && getent passwd $aduser | cut -d: -f1,5
@@ -384,46 +645,109 @@ pathmunge () {
 pathremove () {
     PATH=:$PATH:
     PATH=${PATH//:$1:/:}
-    PATH=${PATH#:}; PATH=${PATH%:}
+    PATH=${PATH#:}
+    PATH=${PATH%:}
 }
 
 
+function MemRpt () {
+    if [ -z "$1" ]; then
+    MEM_TOTAL_GB=$(free -g | grep Mem | awk '{print $2}')
+    MEM_USED_GB=$(free -g | grep Mem | awk '{print $3}')
+    MEM_FREE_GB=$(free -g | grep Mem | awk '{print $4}')
+    MEM_CACHE_GB=$(free -g | grep Mem | awk '{print $6}')
+    MEM_AVAIL_GB=$(free -g | grep Mem | awk '{print $7}')
+    SWAP_TOTAL_GB=$(free -g | grep Swap | awk '{print $2}')
+    SWAP_USED_GB=$(free -g | grep Swap | awk '{print $3}')
+    SWAP_FREE_GB=$(free -g | grep Swap | awk '{print $4}')
 
-#### FG : TODO ####
-## sed 's/[^"]*"\([^"]*\).*/\1/'
-#s - tells sed to substitute
-#/ - start of regex string to search for
-#[^"]* - any character that is not ", any number of times. (matching parameter name=)
-#" - just a ".
-#([^"]*) - anything inside () will be saved for reference to use later. The \ are there so the brackets are not considered as characters to search for. [^"]* means the same as above. (matching RemoteHost for example)
-#.* - any character, any number of times. (matching " access="readWrite"> /parameter)
-#/ - end of the search regex, and start of the substitute string.
-#\1 - reference to that string we found in the brackets above.
-#/ end of the substitute string.
+    echo "Memory_Total GB : ${MEM_TOTAL_GB}"
+    echo "Memory_Used  GB : ${MEM_USED_GB}"
+    echo "Memory_Free  GB : ${MEM_FREE_GB}"
+    echo "Memory_Cache GB : ${MEM_CACHE_GB}"
+    echo "Memory_Avail GB : ${MEM_AVAIL_GB}"
+    echo "Swap_Total GB : ${SWAP_TOTAL_GB}"
+    echo "Swap_Used  GB : ${SWAP_USED_GB}"
+    echo "Swap_Free  GB : ${SWAP_FREE_GB}"
 
-function highlight() {
-    declare -A fg_color_map
-    fg_color_map[black]=30
-    fg_color_map[red]=31
-    fg_color_map[green]=32
-    fg_color_map[yellow]=33
-    fg_color_map[blue]=34
-    fg_color_map[magenta]=35
-    fg_color_map[cyan]=36
+    PAGE_SIZE=$(getconf PAGE_SIZE)
+    SHMALL=$(cat /proc/sys/kernel/shmall)
+    SHM_TOTAL_GB=$(( ${PAGE_SIZE} * ${SHMALL} / 1073741824 ))
+    SHM_USED_GB=$(ipcs -m | grep oracle | awk '{sum += $5} END {printf "%.0f", sum/1073741824}')
+    SHM_FREE_GB=$(( ${SHM_TOTAL_GB} - ${SHM_USED_GB} ))
 
-    fg_c=$(echo -e "\e[1;${fg_color_map[$1]}m")
-    c_rs=$'\e[0m'
-    sed -u s"/$2/$fg_c\0$c_rs/g"
+    echo "Shared_Memory_Total GB : ${SHM_TOTAL_GB}"
+    echo "Shared_Memory_Used  GB : ${SHM_USED_GB}"
+    echo "Shared_Memory_Used  GB : ${SHM_FREE_GB}"
+
+    HPG_SIZE=$(grep Hugepagesize /proc/meminfo | awk '{print $2}')
+    HPG_TOTAL=$(grep HugePages_Total /proc/meminfo | awk '{print $2}')
+    HPG_FREE=$(grep HugePages_Free /proc/meminfo | awk '{print $2}')
+
+    HPG_TOTAL_GB=$(( ${HPG_SIZE} * ${HPG_TOTAL} / 1048576))
+    HPG_USED_GB=$(( ${HPG_SIZE} * (${HPG_TOTAL} - ${HPG_FREE}) / 1048576 ))
+    HPG_FREE_GB=$(( ${HPG_SIZE} * ${HPG_FREE} / 1048576 ))
+    HPG_USED_PERCENT=$(( ${HPG_USED_GB} * 100 / ${HPG_TOTAL_GB} ))
+    HPG_FREE_PERCENT=$(( ${HPG_FREE_GB} * 100 / ${HPG_TOTAL_GB} ))
+
+    echo "HugePages_Total GB : ${HPG_TOTAL_GB}"
+    echo "HugePages_Used  GB : ${HPG_USED_GB}"
+    echo "HugePages_Free  GB : ${HPG_FREE_GB}"
+    echo "HugePages_Used   % : ${HPG_USED_PERCENT}"
+    echo "HugePages_Free   % : ${HPG_FREE_PERCENT}"
+
+    MEM_FREE_GDTOTAL=$(( ${MEM_AVAIL_GB} + ${HPG_FREE_GB} ))
+    MEM_USED_GDTOTAL_PERCENT=$(( (${MEM_USED_GB} - ${HPG_TOTAL_GB} + ${HPG_USED_GB}) * 100 / ${MEM_TOTAL_GB} ))
+    MEM_FREE_GDTOTAL_PERCENT=$(( (${MEM_AVAIL_GB} + ${HPG_FREE_GB}) * 100 / ${MEM_TOTAL_GB} ))
+
+    echo "Memory_Grand_Total_Free  GB : ${MEM_FREE_GDTOTAL} / ${MEM_TOTAL_GB}"
+    echo "Memory_Grand_Total_Used  %  : ${MEM_USED_GDTOTAL_PERCENT}"
+    echo "Memory_Grand_Total_Free  %  : ${MEM_FREE_GDTOTAL_PERCENT}"
+    fi
+
+    [ "${1^^}" == "CSV" ] && echo "$(date "+%d/%m/%Y"),$(hostname -s),${MEM_FREE_GDTOTAL}" || return 0
 }
-#export -f highlight
-
-alias listdbprmy='dbinfo | grep Open | grep $(hostname -s) | cut -d'.' -f2 | tr "[:lower:]" "[:upper:]"'
-# CUT --complement
-#LIST_INSTANCE=GCETSTX01,GCETSTX02,GCETSTX03
-#echo $LIST_INSTANCE | cut -d',' --complement -f1
 
 
-# BASH COMPLETION
+function hugepages_calculator() {
+#!/bin/bash
+#
+# hugepages_setting.sh
+#
+# Linux bash script to compute values for the
+# recommended HugePages/HugeTLB configuration
+#
+# Note: This script does calculation for all shared memory
+# segments available when the script is run, no matter it
+# is an Oracle RDBMS shared memory segment or not.
+# Check for the kernel version
+KERN=`uname -r | awk -F. '{ printf("%d.%d\n",$1,$2); }'`
+# Find out the HugePage size
+HPG_SZ=`grep Hugepagesize /proc/meminfo | awk {'print $2'}`
+# Start from 1 pages to be on the safe side and guarantee 1 free HugePage
+NUM_PG=1
+# Cumulative number of pages required to handle the running shared memory segments
+for SEG_BYTES in `ipcs -m | awk {'print $5'} | grep "[0-9][0-9]*"`
+do
+   MIN_PG=`echo "$SEG_BYTES/($HPG_SZ*1024)" | bc -q`
+   if [ $MIN_PG -gt 0 ]; then
+      NUM_PG=`echo "$NUM_PG+$MIN_PG+1" | bc -q`
+   fi
+done
+# Finish with results
+case $KERN in
+   '2.4') HUGETLB_POOL=`echo "$NUM_PG*$HPG_SZ/1024" | bc -q`;
+          echo "Recommended setting : vm.hugetlb_pool = $HUGETLB_POOL" ;;
+   '2.6' | '3.8' | '3.10' | '4.1' | '4.14' ) echo "Recommended setting : vm.nr_hugepages = $NUM_PG" ;;
+    *) echo "Unrecognized kernel version $KERN. Exiting." ;;
+esac
+
+echo "Current HugePages Allocated : 2K hugepages = " $(cat /proc/sys/vm/nr_hugepages)
+# End
+
+}
+
+## BASH COMPLETION
 # .inputrc
 bind 'set completion-query-items 300'
 #bind 'set print-completions-horizontally off'
@@ -437,37 +761,71 @@ bind 'set completion-query-items 300'
 
 #alias oenv='bash -xc '\''script /dev/null -q -c "export ORAENV_ASK=NO;  export ORACLE_SID=$0; source /usr/local/bin/oraenv; echo ${ORACLE_SID}:${ORACLE_HOME}"'\'''
 #alias oenv='script /dev/null -q -c "echo export ORAENV_ASK=NO;  export ORACLE_SID=$0; source /usr/local/bin/oraenv; echo ${ORACLE_SID}:${ORACLE_HOME}"'
-#alias oenv='eval export ORACLE_SID='
-#alias oenv='bash -xc 'export ORACLE_SID=$0'''
-#alias oenv='echo export ORACLE_SID=$1'
 
+## FUNCTIONS COMPLETION
 oenv()
 {
-export ORAENV_ASK=NO
-export ORACLE_SID=$1
+ORAENV_ASK=NO
+ORACLE_SID=$1
 . oraenv >/dev/null
 echo ${ORACLE_SID}:${ORACLE_HOME}
+unset ORAENV_ASK
+# OR #. oraenv <<<${1}>/dev/null
 }
 export -f oenv
 
-_oraenv_completion() {
-    COMPREPLY=()
-    [[ -f /etc/oratab ]] || return 0
+#SCRIPTS_DIR=${TOOLKIT_BIN:-/oracle/exploit}
+[ -x /prsyslib/toolunix/bin ] && SCRIPTS_DIR=/prsyslib/toolunix/bin
+[ -x /oracle/exploit ] && SCRIPTS_DIR=/oracle/exploit
 
-    local cur="${COMP_WORDS[COMP_CWORD]}"
+_ora_completion() {
+    local cur prev ante
+    COMPREPLY=()
+    cur=${COMP_WORDS[COMP_CWORD]}
+    prev=${COMP_WORDS[COMP_CWORD-1]}
+    ante=${COMP_WORDS[COMP_CWORD-2]}
+    array_scripts=$(ls -p ${SCRIPTS_DIR} | grep -v '/')
+#    array_scripts=$(grep "^[^#|^$|^ *$]" ${SCRIPTS_DIR}/ora/env/init.allow | cut -d' ' -f2 | uniq -u)
+#    array_scripts_args=( "${array_scripts[@]//ora_shell.sh}" )
+
     #word_list=$(cat /etc/oratab | cut -d':' -f1 | grep -v '#')
     #word_list=$(crsctl status resource -w "TYPE = ora.database.type" -p|grep USR_ORA_INST_NAME|sed "s:.*=::"|sort -u)
     #word_list=$(grep -v -e "^#\|^ \|^$" /etc/oratab | cut -f1 -d: | paste -sd " " -)
-    word_list=$(grep -v -e "^#\|^ \|^$" /etc/oratab | cut -f1 -d: | grep "$(ps -eo args | grep pm[o]n | cut -d'_' -f3 | cut -c1-8)" | paste -sd " " -)
-    COMPREPLY=( $(compgen -W "${word_list}" -- ${cur}) )
-}
+    #word_list=$(grep -v -e "^#\|^ \|^$" /etc/oratab | cut -f1 -d: | grep "$(ps -eo args | grep pm[o]n | cut -d'_' -f3- | cut -c1-10)" | paste -sd " " -)
+    word_list_instance=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-10)
+    word_list_dbname=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-8)
+    word_list_bisudo=$(grep "^[^#|^$|^ *$]" ${SCRIPTS_DIR}/ora/env/init.allow 2>/dev/null | cut -d' ' -f2 | uniq)
+    #word_list_scripts=$(ls -p ${SCRIPTS_DIR} | grep -v '/')
+    word_list_tns=$(grep '^[^ ].*=$' ${SCRIPTS_DIR}/ora/wallet_infra/tnsnames.ora 2>/dev/null | cut -d= -f1)
 
-complete -F _oraenv_completion oenv srvctl
-complete -F _oraenv_completion sql.sh dgmgrl.sh rman.sh rman_backup.sh rman_config.sh rman_config_to_tape.sh status_instance.sh status_backup.sh
-complete -F _oraenv_completion ora_sql.sh ora_dgmgrl.sh ora_rman.sh ora_rman_backup.sh ora_rman_config.sh ora_status_instance.sh ora_status_backup.sh
+    [ -n "${DEBUG}" ] && echo "0=$0 1=$1 cur=$cur prev=$prev ante=$ante" #array_scripts="${array_scripts[@]}""
+
+    [[ "${prev}" =~ "oenv" ]] && COMPREPLY=( $(compgen -W "${word_list_instance}" -- $cur) ) && return
+    [[ "${prev}" =~ "bisudo" ]] && COMPREPLY=( $(compgen -W "${word_list_bisudo}" -- $cur) ) && return
+    [[ "${1}" == "sudo" ]] && [[ "${prev}" =~ "oracle" ]] && COMPREPLY=( $(compgen -W "${word_list_bisudo}" -- $cur) ) && return
+    [[ "${1}" == "sudo" ]] && [[ "${array_scripts[@]}" =~ "${prev}" ]] && COMPREPLY=( $(compgen -W "${word_list_dbname}" -- $cur) ) && return
+#    [[ "${array_scripts[@]}" =~ "${prev}" ]] && COMPREPLY=( $(compgen -W "${word_list_dbname}" -- $cur) ) && return
+#    [[ "${array_scripts[@]}" =~ "${prev}" ]] && COMPREPLY=( $(compgen -W "-d" -- $cur) ) && return
+#    [[ "${array_scripts[@]}" =~ "${ante}" && "${prev}" == "-d" ]] && COMPREPLY=( $(compgen -W "${word_list_dbname}"
+    [[ $(grep -c -w -x "${prev//-/}" <<< "${array_scripts[@]}") == 1 ]] && COMPREPLY=( $(compgen -W "-d" -- $cur) ) && return
+    [[ $(grep -c -w -x "${ante//-/}" <<< "${array_scripts[@]}") == 1 && "${prev}" == "-d" ]] && COMPREPLY=( $(compgen -W "${word_list_dbname}" -- $cur) ) && return
+    [[ "${prev}" == "-db"  || "${prev}" == "-d" ]] && COMPREPLY=( $(compgen -W "${word_list_dbname}" -- $cur) ) && return
+    [[ "${1}" =~ "sqlplus" ]] && [[ "${prev}" == "@" ]] && COMPREPLY=( $(compgen -W "${word_list_tns}" -- $cur) ) && return
+
+    ## If nothing matched
+    #[ ${#COMPREPLY[@]} == 0 ] && COMPREPLY=( $(compgen -W "${word_list_dbname}" -- ${cur}) ) && return
+    #COMPREPLY=( $(compgen -W "${word_list}" -- ${cur}) )
+}
+complete -F _ora_completion oenv rlsqlplus
+complete -F _ora_completion sqlplus srvctl exp expdp imp impdp
+#complete -F _ora_completion ora_sql.sh ora_dgmgrl.sh ora_rman.sh ora_rman_backup.sh ora_rman_config.sh ora_status_instance.sh ora_status_backup.sh
+#complete -F _ora_completion sql.sh dgmgrl.sh rman.sh rman_backup.sh rman_config.sh rman_config_to_tape.sh status_instance.sh status_backup.sh
+complete -F _ora_completion $(ls -p ${SCRIPTS_DIR} | grep -v '/' | grep '.sh$')
+#complete -F _ora_completion $(ls -p /oracle/exploit | grep -v '/' | grep '.sh$' ; ls -p /oracle/scripts | grep -v '/' | grep '.sh$')
 
 ## FG : Allow "sudo" to complete
 #complete -cf sudo
+
 
 _listener_completion() {
     COMPREPLY=()
@@ -510,3 +868,250 @@ _example_complete()
 # Register _example_complete to provide completion for the following commands
 complete -F _example_complete oraup
 
+
+## BASH TIMER
+# https://github.com/jichu4n/bash-command-timer
+BCT_ENABLE=1
+BCT_SUCCESS_COLOR='32'
+BCT_ERROR_COLOR='91'
+#BCT_TIME_FORMAT='%b %d %I:%M%p'
+BCT_TIME_FORMAT='%a %b %d %H:%M:%S'
+BCT_MILLIS=1
+BCT_WRAP=0
+
+if date +'%N' | grep -qv 'N'; then
+  BCTTime="date '+%s%N'"
+  function BCTPrintTime() {
+    date --date="@$1" +"$BCT_TIME_FORMAT"
+  }
+elif hash gdate 2>/dev/null && gdate +'%N' | grep -qv 'N'; then
+  BCTTime="gdate '+%s%N'"
+  function BCTPrintTime() {
+    gdate --date="@$1" +"$BCT_TIME_FORMAT"
+  }
+elif hash perl 2>/dev/null; then
+  BCTTime="perl -MTime::HiRes -e 'printf(\"%d\",Time::HiRes::time()*1000000000)'"
+  function BCTPrintTime() {
+    date -r "$1" +"$BCT_TIME_FORMAT"
+  }
+else
+  echo 'No compatible date, gdate or perl commands found, aborting'
+  exit 1
+fi
+
+BCT_AT_PROMPT=1
+function BCTPreCommand() {
+  local EXIT="$?"
+  if [ $EXIT == 0 ]
+  then
+    # colour for exit without error
+    BCT_COLOR=$BCT_SUCCESS_COLOR
+  else
+    # colour for exit with error
+    BCT_COLOR=$BCT_ERROR_COLOR
+  fi
+  if [ -z "$BCT_AT_PROMPT" ]; then
+    return
+  fi
+  unset BCT_AT_PROMPT
+  BCT_COMMAND_START_TIME=$(eval $BCTTime)
+}
+trap 'BCTPreCommand' DEBUG
+
+# Bash will automatically set COLUMNS to the current terminal width.
+export COLUMNS
+
+# Flag to prevent printing out the time upon first login.
+BCT_FIRST_PROMPT=1
+# This is executed before printing out the prompt.
+function BCTPostCommand() {
+  BCT_AT_PROMPT=1
+
+  if [ -n "$BCT_FIRST_PROMPT" ]; then
+    unset BCT_FIRST_PROMPT
+    return
+  fi
+
+  if [ -z "$BCT_ENABLE" ] || [ $BCT_ENABLE -ne 1 ]; then
+    return
+  fi
+
+  # BCTTime prints out time in nanoseconds.
+  local MSEC=1000000
+  local SEC=$(($MSEC * 1000))
+  local MIN=$((60 * $SEC))
+  local HOUR=$((60 * $MIN))
+  local DAY=$((24 * $HOUR))
+
+  local command_start_time=$BCT_COMMAND_START_TIME
+  local command_end_time=$(eval $BCTTime)
+  local command_time=$(($command_end_time - $command_start_time))
+  local num_days=$(($command_time / $DAY))
+  local num_hours=$(($command_time % $DAY / $HOUR))
+  local num_mins=$(($command_time % $HOUR / $MIN))
+  local num_secs=$(($command_time % $MIN / $SEC))
+  local num_msecs=$(($command_time % $SEC / $MSEC))
+  local time_str=""
+  if [ $num_days -gt 0 ]; then
+    time_str="${time_str}${num_days}d "
+  fi
+  if [ $num_hours -gt 0 ]; then
+    time_str="${time_str}${num_hours}h "
+  fi
+  if [ $num_mins -gt 0 ]; then
+    time_str="${time_str}${num_mins}m "
+  fi
+  local num_msecs_pretty=''
+  if [ -n "$BCT_MILLIS" ] && [ $BCT_MILLIS -eq 1 ]; then
+    local num_msecs_pretty=$(printf '%03d' $num_msecs)
+  fi
+  time_str="${time_str}${num_secs}s${num_msecs_pretty}"
+  now_str=$(BCTPrintTime $(($command_end_time / $SEC)))
+  if [ -n "$now_str" ]; then
+    local output_str="[ $time_str | $now_str ]"
+  else
+    local output_str="[ $time_str ]"
+  fi
+  if [ -n "$BCT_COLOR" ]; then
+    local output_str_colored="\033[${BCT_COLOR}m${output_str}\033[0m"
+  else
+    local output_str_colored="${output_str}"
+  fi
+  # Trick to make sure the output wraps to the next line if there is not
+  # enough room for the string (only when BCT_WRAP == 1)
+  if [ -n "$BCT_WRAP" ] && [ $BCT_WRAP -eq 1 ]; then
+    # we'll print as many spaces as characters exist in output_str, plus 2
+    local wrap_space_prefix="${output_str//?/ }  "
+  else
+    local wrap_space_prefix=""
+  fi
+
+  # Move to the end of the line. This will NOT wrap to the next line
+  # unless you have BCT_WRAP == 1
+  echo -ne "$wrap_space_prefix\033[${COLUMNS}C"
+  # Move back (length of output_str) columns.
+  echo -ne "\033[${#output_str}D"
+  # Finally, print output.
+  echo -e "${output_str_colored}"
+}
+PROMPT_COMMAND='BCTPostCommand'
+## END - BASH TIMER
+
+## Print a clock
+function prompt_command {
+let prompt_x=$COLUMNS-6
+PROMPT_COMMAND=prompt_command
+}
+
+function print_clock {
+local       BLUE="\[\033[0;34m\]"
+local        RED="\[\033[0;31m\]"
+local  LIGHT_RED="\[\033[1;31m\]"
+local      WHITE="\[\033[1;37m\]"
+local  NO_COLOUR="\[\033[0m\]"
+case $TERM in
+    xterm*)
+        TITLEBAR='\[\033]0;\u@\h:\w\007\]'
+        ;;
+    *)
+        TITLEBAR=""
+        ;;
+esac
+
+PS1_CURRENT=${PS1}
+PS1="${TITLEBAR}\
+\[\033[s\033[1;\$(echo -n \${prompt_x})H\]\
+$BLUE[$LIGHT_RED\$(date +%Hh%M)$BLUE]\
+\[\033[u\033[1A\]\
+${PS1_CURRENT}"
+#$BLUE[$LIGHT_RED\u@\h:\w$BLUE]\
+#$WHITE\$$NO_COLOUR "
+}
+## END - Print a clock
+
+
+#### FG : TODO ####
+## sed 's/[^"]*"\([^"]*\).*/\1/'
+#s - tells sed to substitute
+#/ - start of regex string to search for
+#[^"]* - any character that is not ", any number of times. (matching parameter name=)
+#" - just a ".
+#([^"]*) - anything inside () will be saved for reference to use later. The \ are there so the brackets are not considered as characters to search for. [^"]* means the same as above. (matching RemoteHost for example)
+#.* - any character, any number of times. (matching " access="readWrite"> /parameter)
+#/ - end of the search regex, and start of the substitute string.
+#\1 - reference to that string we found in the brackets above.
+#/ end of the substitute string.
+
+function highlight() {
+    declare -A fg_color_map
+    fg_color_map[black]=30
+    fg_color_map[red]=31
+    fg_color_map[green]=32
+    fg_color_map[yellow]=33
+    fg_color_map[blue]=34
+    fg_color_map[magenta]=35
+    fg_color_map[cyan]=36
+
+    fg_c=$(echo -e "\e[1;${fg_color_map[$1]}m")
+    c_rs=$'\e[0m'
+    sed -u s"/$2/$fg_c\0$c_rs/g"
+}
+#export -f highlight
+
+alias listdbprmy='dbinfo | grep Open | grep $(hostname -s) | cut -d'.' -f2 | tr "[:lower:]" "[:upper:]"'
+# CUT --complement
+#LIST_INSTANCE=GCETSTX01,GCETSTX02,GCETSTX03
+#echo $LIST_INSTANCE | cut -d',' --complement -f1
+
+
+function SendMail() {
+	STATUS=$1
+	COMMENT=$2
+	hostname | grep prdres && ENV=PRD
+	hostname | grep intres && ENV=HPR
+
+	MAIL_FILE=Report_Mail.msg
+	MAIL_FROM=ANSIBLE_${ENV}_$(hostname -s)
+	#[ "${ENV}" == "HPR" ] && MAIL_TO=Frederic.GROUSSELLE.prestataire@bpce-it.fr || MAIL_TO=DIC_BDD_ORE@bpce-it.fr
+	[ "${ENV}" == "HPR" ] && MAIL_TO=Frederic.GROUSSELLE.prestataire@bpce-it.fr || MAIL_TO=Frederic.GROUSSELLE.prestataire@bpce-it.fr
+	MAIL_SUBJECT="[ANSIBLE][${ENV}] Deploiement des scripts du GIT en environnement \"${ENV}\""
+	#LOG_CONTENTS_FILE=$( awk 'BEGIN{print "<div>"} {print "<br>";for(i=1;i<=NF;i++)print $i;} END{print "</div>"}' < <(tail -10 ~/${LOG_FILE}) )
+	#LOG_CONTENTS_FILE=$( while read line; do BLINE="<b>$(cut -d: -f1<<<${line}) :</b>"; ELINE="$(cut -d: -f2-<<<${line})";  echo "<br>${BLINE}${ELINE}"; done < <(tail -10 ~/${LOG_FILE}) )
+	#LOG_CONTENTS_FILE=$( while read line; do echo "${line}"; done < <(tail -10 ~/${LOG_FILE}) )
+
+#Content-Type: multipart/mixed; boundary="."
+#awk 'BEGIN{print "<table>"} {print "<tr>";for(i=1;i<=NF;i++)print "<td>" $i"</td>";print "</tr>"} END{print "</table>"}' test >> email.html
+
+	MAIL_CONTENTS="From: ${MAIL_FROM}
+To: ${MAIL_TO}
+Subject: ${MAIL_SUBJECT}
+Mime-Version: 1.0
+Content-Type: text/html; charset="us-ascii"
+
+<!-- --. -->
+<html><body>
+<p>
+<br><b>Compte rendu d'execution ${COMMENT}:</b> $(basename ${0})
+<br><b>Statut :</b> ${STATUS}
+<br>
+<br><b>Log Git :</b> ${GIT2SYNC_DIR#${HOME}/}/${GIT2SYNC_FILE}
+<pre>${GIT_OUT}</pre>
+<br><b>Log Ansible :</b> ${cmd}
+<pre>${ANSIBLE_OUT}</pre>
+</p>
+</body></html>
+"
+
+	echo "${MAIL_CONTENTS}"
+	echo "${MAIL_CONTENTS}" | /usr/sbin/sendmail -t
+	#/usr/sbin/sendmail -t <<< "${MAIL_CONTENTS}"
+
+#	echo ${MAIL_CONTENTS}>${MAIL_FILE}
+#	cat ${MAIL_FILE} | /usr/sbin/sendmail -t
+}
+
+
+## SAR
+#sar -n DEV 1 60 | grep -E 'Average:        IFACE|Average:    bondeth0.3375' | awk '{ print $1"  "$2"  "$5" "$6}' | column -t
+#sar -n DEV 1 5 | grep -E 'Average:' | awk '{ print $1"  "$2"  "$5" "$6}' | sort |  column -t
+#### END TODO #####

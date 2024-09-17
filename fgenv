@@ -4,11 +4,11 @@
 #WORKDIR="${0%/*}" # Not working when script is not executed but sourced
 #if [ -z "${WORKDIR}" ]
 #then
-#	[ -x "${BPCEIT_PATH}" ] && WORKDIR=${BPCEIT_PATH}
+#    [ -x "${BPCEIT_PATH}" ] && WORKDIR=${BPCEIT_PATH}
 #else
-	[ -h "${BASH_SOURCE}" ] && echo ${BASH_SOURCE} is a link && CURRENT_DIR=$(readlink ${BASH_SOURCE}) || CURRENT_DIR=${BASH_SOURCE}
-	WORKDIR=$(dirname ${CURRENT_DIR})
-	[ -d "${WORKDIR}/../bin" ] && WORKDIR=$(dirname ${WORKDIR})
+    [ -h "${BASH_SOURCE}" ] && echo ${BASH_SOURCE} is a link && CURRENT_DIR=$(readlink ${BASH_SOURCE}) || CURRENT_DIR=${BASH_SOURCE}
+    WORKDIR=$(dirname ${CURRENT_DIR})
+    [ -d "${WORKDIR}/../bin" ] && WORKDIR=$(dirname ${WORKDIR})
 #fi
 #EXADATA_WORKDIR=/oracle/tmp
 #VIOLET_WORKDIR=/tech/FGR
@@ -24,7 +24,7 @@ then
   PLATFORM=EXADATA
   echo "Environnement ${PLATFORM}"
   #WORKDIR=${EXADATA_WORKDIR}
-  [ $(grep -c "/oracle/scripts" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit
+  [ ! -d "/prsyslib" ] && [ $(grep -c "/oracle/scripts" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit
 else
   PLATFORM=LINUX
   echo "Environnement VIOLET (Hors Exadata)"
@@ -60,7 +60,8 @@ alias psg="ps aux | grep -v grep | grep -i"
 #alias dmesg='dmesg -H'
 alias iperf3_stop='pkill -ecnf "iperf3 -sD"'
 alias vim='vim -u ${LIBDIR}/.vimrc'
-#alias vi=vim
+alias vi=vim
+export VIMRUNTIME=${LIBDIR}/share/vim/vim74
 alias ssh='ssh -o ServerAliveInterval=30'
 alias nmon=${BINDIR}/nmon
 alias nmon14g=${BINDIR}/nmon14g_x86_rhel7
@@ -74,15 +75,15 @@ alias nmon14g=${BINDIR}/nmon14g_x86_rhel7
 function display_all_colors_16()
 {
 for clbg in {40..47} {100..107} 49 ; do
-	#Foreground
-	for clfg in {30..37} {90..97} 39 ; do
-		#Formatting
-		for attr in 0 1 2 4 5 7 ; do
-			#Print the result
-			echo -en "\e[${attr};${clbg};${clfg}m ^[${attr};${clbg};${clfg}m \e[0m"
-		done
-		echo #Newline
-	done
+    #Foreground
+    for clfg in {30..37} {90..97} 39 ; do
+        #Formatting
+        for attr in 0 1 2 4 5 7 ; do
+            #Print the result
+            echo -en "\e[${attr};${clbg};${clfg}m ^[${attr};${clbg};${clfg}m \e[0m"
+        done
+        echo #Newline
+    done
 done
 }
 
@@ -250,6 +251,31 @@ export SCREENRC=${LIBDIR}/.screenrc
 
 # FUNCTION
 
+function oralisthome () {
+printf "%6s %-20s %-80s\n" "PID" "NAME" "ORACLE_HOME"
+pgrep -af _pmon_ |
+  while read pid pname  y ; do
+    printf "%6s %-20s %-80s\n" $pid $pname `ls -l /proc/$pid/exe | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//' | sort | uniq`
+  done
+}
+
+function oralistcnx () {
+ps -eo "args" | grep LOCAL=NO | sort | uniq -c
+}
+
+function lsnGetservice () {
+LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | sed 's/.*lsnr \(.*\) -no.*/\1/')
+for LSN_NAME in ${LSN_NAME_LIST}; do
+    cmd="lsnrctl status ${LSN_NAME} | grep -m 3 ${1}.*_APPLI"
+    host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's/.*\(.*HOST=.*\)\(PORT=.*\)/Host=\1 Port=\2/')
+    echo "${LSN_NAME} :"
+    echo ${cmd}
+    eval ${cmd}
+    #eval ${cmd} | highlight cyan 'lsnrctl status'
+done
+}
+
+
 #du -sk ./* | /usr/bin/sort -n | /usr/bin/awk 'BEGIN{ pref[1]="K"; pref[2]="M"; pref[3]="G";} { total = total + $1; x = $1; y = 1; while( x > 1024 ) { x = (x + 1023)/1024; y++; } printf("%g%s\t%s\n",int(x*10)/10,pref[y],$2); } END { y = 1; while( total > 1024 ) { total = (total + 1023)/1024; y++; } printf("Total: %g%s\n",int(total*10)/10,pref[y]); }'
 #du -sk * | awk '{ total = total + $1 } END { print total }'
 #ls -l | awk '{sum += $5} END {print sum}'
@@ -313,43 +339,88 @@ du -sk ${filter} | sort -n | awk '
 }
 
 
-function oralisthome () {
-printf "%6s %-20s %-80s\n" "PID" "NAME" "ORACLE_HOME"
-pgrep -af _pmon_ |
-  while read pid pname  y ; do
-    printf "%6s %-20s %-80s\n" $pid $pname `ls -l /proc/$pid/exe | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//' | sort | uniq`
-  done
+alias nbfilebyday="stat -c "%y" * |cut -d' ' -f1|sort|uniq -c"
+alias nbhfilebyday="stat -c "%y" * .*|cut -d' ' -f1|sort|uniq -c|tr -d "-""
+function sizebyDay () { ls -l --time-style=long-iso * | awk '{sum[$6] += $5/1048576;} END { for (date in sum) {printf "%s MB %d\n", date, sum[date];} }' | sort -k1 | column -t ; }
+function sizebyDay2 () { ls -l --time-style=long-iso * | WHINY_USERS=-9 awk 'END { for (date in sum) printf "%s\t MB %-15d\n", date, sum[date];} { sum[$6] += $5/1048576;}' ; }
+
+## Only files, from current directory only, sorted by date and summed
+function sizebyDayf () { find ./ -maxdepth 1 -type f -printf '%TY-%Tm-%Td %s\n' | awk '{sum[$1] += $2/1048576;} END { for (date in sum){printf "%-15s MB %d\n", date, sum[date];} }' | sort ; }
+
+## Only files, recursively, sorted by date and summed
+function sizebyDayfr () { find ./ -type f -printf '%TY-%Tm-%Td %s\n' | awk '{sum[$1] += $2/1048576; total += $2/1048576} END { for (date in sum){printf "%-15s MB %d\n", date, sum[date];} printf "Total MB %d\n", total; }' | sort ; }
+function sizebyMonthfr () { find ./ -type f -printf '%TY-%Tm %s\n' | awk '{sum[$1] += $2/1048576; total += $2/1048576} END { for (date in sum){printf "%-15s MB %d\n", date, sum[date];} printf "Total MB %d\n", total; }' | sort ; }
+
+#time find -type f -ctime +90 | xargs -ifile du file | cut -d'/' -f1,2 | awk '{sum[$2] += $1/1024; total += $1/1048576} END { for (dir in sum){printf "%-30s MB %d\n", dir, sum[dir];} printf "Total MB %d\n", total; }' | sort -nk3
+
+adGetuserInfo () {
+    [ -z "$1" ] && echo Arg 1 is Required && return 1
+    [ -n "$2" ] && GREP_GROUP="| grep -i $2"
+    getent passwd $1
+    eval "getent group | grep -i $1 | cut -d: -f1 ${GREP_GROUP}"
 }
 
-
-function highlight() {
-	declare -A fg_color_map
-	fg_color_map[black]=30
-	fg_color_map[red]=31
-	fg_color_map[green]=32
-	fg_color_map[yellow]=33
-	fg_color_map[blue]=34
-	fg_color_map[magenta]=35
-	fg_color_map[cyan]=36
-
-	fg_c=$(echo -e "\e[1;${fg_color_map[$1]}m")
-	c_rs=$'\e[0m'
-	sed -u s"/$2/$fg_c\0$c_rs/g"
+adGetgroupInfo () {
+    [ -z "$1" ] && echo Arg 1 is Required && return 1
+    for aduser in $(getent group $1 | cut -d: -f4 | sed "s/,/\n/g" | sort)
+    do
+        [ -z "$2" ] && getent passwd $aduser | cut -d: -f1,5
+        [ "$2" == "-v" ] && adGetuserInfo $aduser $3
+    done
 }
 
 
 pathmunge () {
-    case ":${PATH}:" in
-        *:"$1":*)
-            ;;
-        *)
-            if [ "$2" = "after" ] ; then
-                PATH=$PATH:$1
-            else
-                PATH=$1:$PATH
-            fi
-    esac
+## Add to PATH if not exists (default before or specify after)
+    if ! echo $PATH | /bin/egrep -q "(^|:)$1($|:)" ; then
+        if [ "$2" = "after" ] ; then
+            PATH=$PATH:$1
+        else
+            PATH=$1:$PATH
+        fi
+    fi
 }
+
+pathremove () {
+    PATH=:$PATH:
+    PATH=${PATH//:$1:/:}
+    PATH=${PATH#:}; PATH=${PATH%:}
+}
+
+
+
+#### FG : TODO ####
+## sed 's/[^"]*"\([^"]*\).*/\1/'
+#s - tells sed to substitute
+#/ - start of regex string to search for
+#[^"]* - any character that is not ", any number of times. (matching parameter name=)
+#" - just a ".
+#([^"]*) - anything inside () will be saved for reference to use later. The \ are there so the brackets are not considered as characters to search for. [^"]* means the same as above. (matching RemoteHost for example)
+#.* - any character, any number of times. (matching " access="readWrite"> /parameter)
+#/ - end of the search regex, and start of the substitute string.
+#\1 - reference to that string we found in the brackets above.
+#/ end of the substitute string.
+
+function highlight() {
+    declare -A fg_color_map
+    fg_color_map[black]=30
+    fg_color_map[red]=31
+    fg_color_map[green]=32
+    fg_color_map[yellow]=33
+    fg_color_map[blue]=34
+    fg_color_map[magenta]=35
+    fg_color_map[cyan]=36
+
+    fg_c=$(echo -e "\e[1;${fg_color_map[$1]}m")
+    c_rs=$'\e[0m'
+    sed -u s"/$2/$fg_c\0$c_rs/g"
+}
+#export -f highlight
+
+alias listdbprmy='dbinfo | grep Open | grep $(hostname -s) | cut -d'.' -f2 | tr "[:lower:]" "[:upper:]"'
+# CUT --complement
+#LIST_INSTANCE=GCETSTX01,GCETSTX02,GCETSTX03
+#echo $LIST_INSTANCE | cut -d',' --complement -f1
 
 
 # BASH COMPLETION
@@ -386,12 +457,17 @@ _oraenv_completion() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     #word_list=$(cat /etc/oratab | cut -d':' -f1 | grep -v '#')
     #word_list=$(crsctl status resource -w "TYPE = ora.database.type" -p|grep USR_ORA_INST_NAME|sed "s:.*=::"|sort -u)
-    word_list=$(grep -v -e "^#\|^ \|^$" /etc/oratab | cut -f1 -d: | paste -sd " " -)
+    #word_list=$(grep -v -e "^#\|^ \|^$" /etc/oratab | cut -f1 -d: | paste -sd " " -)
+    word_list=$(grep -v -e "^#\|^ \|^$" /etc/oratab | cut -f1 -d: | grep "$(ps -eo args | grep pm[o]n | cut -d'_' -f3 | cut -c1-8)" | paste -sd " " -)
     COMPREPLY=( $(compgen -W "${word_list}" -- ${cur}) )
 }
 
-complete -F _oraenv_completion oenv srvctl sql.sh dgmgrl.sh rman.sh rman_backup.sh rman_config.sh rman_config_to_tape.sh status_instance.sh status_backup.sh
+complete -F _oraenv_completion oenv srvctl
+complete -F _oraenv_completion sql.sh dgmgrl.sh rman.sh rman_backup.sh rman_config.sh rman_config_to_tape.sh status_instance.sh status_backup.sh
+complete -F _oraenv_completion ora_sql.sh ora_dgmgrl.sh ora_rman.sh ora_rman_backup.sh ora_rman_config.sh ora_status_instance.sh ora_status_backup.sh
 
+## FG : Allow "sudo" to complete
+#complete -cf sudo
 
 _listener_completion() {
     COMPREPLY=()

@@ -215,6 +215,7 @@ then
       alias rlsqlc='SQLPATH=${ORACLE_PATH} rlwrap -f ${RLWRAP_DIR}/sqlplus_completions \sql / as sysdba @ login_noauto_sqlcl ${COLUMNS}'
       alias rlsqlasm='rlwrap -f ${RLWRAP_DIR}/sqlplus_completions sqlplus / as sysasm @ login_noauto ${COLUMNS}'
       alias sql='rlsql'
+      [ "${LOGNAME}" == "grid" ] && [[ "${ORACLE_SID^^}" ~= "ASM" ]] && alias sql='rlsqlasm'
       alias sqlc='rlsqlc'
       alias sqlasm='rlsqlasm'
       alias rmn='rlrman target /'
@@ -292,6 +293,8 @@ function loopdb(){
   SQL_PARAM="WHENEVER SQLERROR EXIT SQL.SQLCODE\nset head off lines $[${COLUMNS}-${COLUMNS}/3] pages 0 trimout on\n"
   [ -n "${TIMING}" ] && SQL_PARAM+="set timing on\n"
 
+  column value new_val blksize
+  select value from v$parameter where name = 'db_block_size'
   #ENVSQL="${ENVSQL}"
     #ENVSQL_HEADER="CPU_COUNT"
   DB_VERSION="SELECT VERSION FROM PRODUCT_COMPONENT_VERSION WHERE PRODUCT LIKE '%Oracle Database%';"
@@ -734,10 +737,11 @@ alias nmon14g=${BINDIR}/nmon14g_x86_rhel7
 #script /dev/null => bash -c '\''script /dev/null -q -c
 
 ## FGR 2022-02-04 : Force the use of the custom screen in case other screen rpm is installed
-#alias screen='${BPCEIT_PATH}/bin/screen -h 50000'
-alias screen='screen -h 50000'
+alias screen='${BPCEIT_PATH}/bin/screen -h 50000'
+#alias screen='screen -h 50000'
 alias sc='screen -h 50000'
 alias scls='screen -ls'
+#alias scls='screen -ls | \grep "${1}"'
 alias scr='screen -r'
 alias scs='screen -S'
 # Command SCRIPT is used as a workaround when not connected as root : "Cannot open your terminal '/dev/pts/0' - please check."
@@ -1007,7 +1011,7 @@ function MemRpt () {
     local SHM_USED_GB=$(ipcs -m | grep oracle | awk '{sum += $5} END {printf "%.0f", sum/1073741824}')
     local SHM_FREE_GB=$(echo "${BC_SCALE} ${SHM_TOTAL_GB} - ${SHM_USED_GB}" | bc)
     fi
-    echo "Shared_Memory_Total GB : ${SHM_TOTAL_GB}"
+    echo "Shared_Memory_Limit GB : ${SHM_TOTAL_GB}"
     echo "Shared_Memory_Used  GB : ${SHM_USED_GB}"
     echo "Shared_Memory_Free  GB : ${SHM_FREE_GB}"
 

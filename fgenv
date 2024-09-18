@@ -544,18 +544,27 @@ done
 }
 
 
-function lsnGetservice () (
-echo "Usage : Connected as 'grid' ${FUNCNAME} <TRI>.*X1"
+function lsnGetservice () {
+FORMER_FUNCNAME=${FUNCNAME}
+#echo "Usage : Connected as 'grid' ${FUNCNAME} <TRI>.*X1"
 ## TODO : sudo -u grid || ssh grid@localhost + oraenv +ASM
+    function Usage() {
+    echo "Usage : ${FORMER_FUNCNAME} <DB_STRING>.*X1"
+    }
+
+[ -z "${1}" ] && Usage && read -p "List all listener services ? (return to continue) " ANSWER
+[ ! -z "${ANSWER}" ] && exit
 
     MainFunc () {
+    #echo "Usage : ${FORMER_FUNCNAME} <TRI>.*X1"
     LSN_SERVICE=${1:-.}
 #    LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | sed 's/.*lsnr \(.*\) -no.*/\1/')
     LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | awk '{print $2}')
     for LSN_NAME in ${LSN_NAME_LIST}; do
         #cmd="lsnrctl status ${LSN_NAME} | grep -m 3 ${LSN_SERVICE}.*_APPLI"
         cmd="lsnrctl status ${LSN_NAME} | grep ${LSN_SERVICE}"
-        host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's/.*\(.*HOST=.*\))(\(PORT=.*\))))/\1 \2/')
+        #host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's/.*\(.*HOST=.*\))(\(PORT=.*\))))/\1 \2/')
+        host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's:.*(\(.*HOST=.*\))(\(PORT=[0-9]*\)).*:\1 \2:')
         echo -e "\e[7;40;37m${LSN_NAME}\e[0m : "${host_port}
         #echo ${cmd}
         #eval ${cmd}
@@ -565,19 +574,18 @@ echo "Usage : Connected as 'grid' ${FUNCNAME} <TRI>.*X1"
     done
     }
 
-#set -x
     if [ "${LOGNAME}" == "grid" ]; then
         if [[ ! "${ORACLE_SID}" =~ "ASM" ]]; then HOST=$(hostname -s); export ORACLE_SID="+ASM${HOST:0,-1}"; export ORAENV_ASK=NO; . oraenv>/dev/null; fi
         MainFunc $1
     else
-        export -f MainFunc
-        su grid -c "bash -c HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv>/dev/null; MainFunc $1"
+        #export -f MainFunc
+        #su grid -c "bash -c HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv>/dev/null; MainFunc $1"
         #su grid -c "bash -c echo "HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv; echo ${ORACLE_SID}:${ORACLE_HOME}; MainFunc $1""
-        #sudo -u grid bash -c
+        sudo -i -u grid bash -c ". ${BPCEIT_PATH}/lib/fgenv &>/dev/null; export PATH=\$PATH:/usr/local/bin/; HOST=\$(hostname -s); export ORACLE_SID=+ASM\${HOST:0,-1}; export ORAENV_ASK=NO; . oraenv>/dev/null; lsnGetservice $1"
+        #sudo -u grid bash -c "MainFunc $1"
         #su grid -c "bash -c MainFunc $1"
     fi
-#set +x
-)
+}
 
 
 function set_oracle_wallet(){

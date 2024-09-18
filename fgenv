@@ -2,6 +2,7 @@
 
 ## GENERAL
 [ "${1}" == "-s" ] && SILENT=TRUE || unset SILENT
+#TIMEFORMAT="Time Elapsed : %3Rs"
 
 # WORKAROUND DEFAULT ENV
 # Default Shell Deconnection Timeout
@@ -24,6 +25,7 @@ LIBDIR=${WORKDIR}/lib
 [ $(grep -c "${WORKDIR}" <<< ${MANPATH}) -eq 0 ] && export MANPATH="$(manpath -g):${WORKDIR}/usr/share/man"
 
 
+## FGR : SCRIPT_DIR is from bienv.sh
 #SCRIPT_DIR=${TOOLKIT_BIN:-/oracle/exploit}
 #[ -x /prsyslib/toolunix/bin ] && SCRIPT_DIR=/prsyslib/toolunix/bin
 #[ -x /oracle/exploit ] && SCRIPT_DIR=/oracle/exploit
@@ -33,8 +35,8 @@ SCRIPT_DIR=${TOOLKIT_BIN:-$(dirname $(which --skip-alias ora_functions.sh &>/dev
 ## IF EXADATA
 if [ $(hostname | grep "dbadm") ]; then
   PLATFORM=EXADATA
-  WELCOME_MSG="Plateforme : ${PLATFORM}"
-  [ ! -d "/prsyslib" ] && [ $(grep -c "/oracle/scripts" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit
+  [ $(hostname | grep "mezp") ] && WELCOME_MSG="Plateforme : ZDLRA" || WELCOME_MSG="Plateforme : ${PLATFORM}"
+#  [ ! -d "/prsyslib" ] && [ $(grep -c "/oracle/scripts" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit
 else
   PLATFORM=LINUX
   WELCOME_MSG="Plateforme : VIOLET (Hors Exadata)"
@@ -186,7 +188,7 @@ then
     alias lslsn='ps -ef | grep l[s]n'
     [ -f "${ORACLE_HOME}/suptools/oratop/oratop" ] && ORATOP_PATH=${ORACLE_HOME}/suptools/oratop || ORATOP_PATH=${BPCEIT_PATH}/bin
     alias oratop="${ORATOP_PATH}/oratop -f -r / as sysdba"
-
+    alias alrt="echo /u01/app/oracle/diag/rdbms/$(echo ${ORACLE_SID:0:8}D* | tr '[:upper:]' '[:lower:]')/${ORACLE_SID}/trace/alert_${ORACLE_SID}.log"
     IS_RLWRAP_IN_PATH=$(which --skip-alias rlwrap >/dev/null 2>&1; echo $?)
     IS_RLWRAP_IN_WORKDIR=$(test -x ${BINDIR}/rlwrap; echo $?)
     [ ${IS_RLWRAP_IN_PATH} == 0 ] && RLWRAP_BIN=rlwrap || echo "rlwrap binary not present or not executable : ${BINDIR}/rlwrap"
@@ -198,15 +200,18 @@ then
     then
       alias rlwrap="${RLWRAP_BIN} --histsize 5000"
       alias rlsqlplus='rlwrap -f ${RLWRAP_DIR}/sqlplus_completions sqlplus'
+      alias rlsqlcl='SQLPATH=${ORACLE_PATH} rlwrap -f ${RLWRAP_DIR}/sqlplus_completions \sql'
       alias rlrman='rlwrap -f ${RLWRAP_DIR}/rman_completions rman'
       alias rldgmgrl='rlwrap -f ${RLWRAP_DIR}/dgmgrl_completions dgmgrl'
-      alias rlasmcmd='rlwrap -f ${RLWRAP_DIR}/asmcmd_completions asmcmd'
-      alias rlasmcmdora='ORACLE_HOME=${GI_HOME} rlwrap -f ${RLWRAP_DIR}/asmcmd_completions asmcmd --privilege sysdba'
+      alias rlasmcmd='rlwrap -f ${RLWRAP_DIR}/asmcmd_completions asmcmd -p'
+      alias rlasmcmdora='ORACLE_HOME=${GI_HOME} rlwrap -f ${RLWRAP_DIR}/asmcmd_completions asmcmd -p --privilege sysdba'
       alias rladrci='rlwrap -f ${RLWRAP_DIR}/adrci_completions adrci'
       alias rllsn='rlwrap -f ${RLWRAP_DIR}/lsnrctl_completions lsnrctl'
       alias rlsql='rlwrap -f ${RLWRAP_DIR}/sqlplus_completions sqlplus / as sysdba @ login_noauto ${COLUMNS}'
+      alias rlsqlc='SQLPATH=${ORACLE_PATH} rlwrap -f ${RLWRAP_DIR}/sqlplus_completions \sql / as sysdba @ login_noauto_sqlcl ${COLUMNS}'
       alias rlsqlasm='rlwrap -f ${RLWRAP_DIR}/sqlplus_completions sqlplus / as sysasm @ login_noauto ${COLUMNS}'
       alias sql='rlsql'
+      alias sqlc='rlsqlc'
       alias sqlasm='rlsqlasm'
       alias rmn='rlrman target /'
       alias dgb='rldgmgrl /'
@@ -541,7 +546,8 @@ echo "Usage : Connected as 'grid' ${FUNCNAME} <TRI>.*X1"
 
     MainFunc () {
     LSN_SERVICE=${1:-.}
-    LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | sed 's/.*lsnr \(.*\) -no.*/\1/')
+#    LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | sed 's/.*lsnr \(.*\) -no.*/\1/')
+    LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | awk '{print $2}')
     for LSN_NAME in ${LSN_NAME_LIST}; do
         #cmd="lsnrctl status ${LSN_NAME} | grep -m 3 ${LSN_SERVICE}.*_APPLI"
         cmd="lsnrctl status ${LSN_NAME} | grep ${LSN_SERVICE}"
@@ -569,12 +575,20 @@ echo "Usage : Connected as 'grid' ${FUNCNAME} <TRI>.*X1"
 #set +x
 )
 
+
+function set_oracle_wallet(){
+    local REP_WALLET_INFRA
+    REP_WALLET_INFRA="${TOOLKIT_DIR:-/prsyslib/toolunix/bin}/ora/wallet_infra"
+    export TNS_ADMIN=${1:-$REP_WALLET_INFRA}
+    echo "TNS_ADMIN=${TNS_ADMIN}"
+}
+
 function oracle_wallet(){
+    local REP_WALLET_INFRA
     # FGR : #orapki wallet change_pwd -wallet ${REP_WALLET_INFRA} -oldpwd '<old_passwd>' -newpwd '<new_passwd>'
     if $(which --skip-alias mkstore &>/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
-    local TOOLKIT_DIR=$(dirname $(which --skip-alias ora_functions.sh))
-    local REP_WALLET_INFRA="${TOOLKIT_DIR:-/prsyslib/toolunix/bin}/ora/wallet_infra"
-    export TNS_ADMIN=${TNS_ADMIN:-$REP_WALLET_INFRA}
+    REP_WALLET_INFRA="${TOOLKIT_DIR:-/prsyslib/toolunix/bin}/ora/wallet_infra"
+    export TNS_ADMIN=${REP_WALLET_INFRA}
     echo "TNS_ADMIN=${TNS_ADMIN}"
     [ -z "${WALLET_PASSWD}" ] && read -p "Enter Wallet Password : " -s WALLET_PASSWD
     if ! $(echo "${WALLET_PASSWD}" | mkstore -wrl ${REP_WALLET_INFRA} -listCredential &>/dev/null) ; then echo 'Wrong Wallet password' ; fi
@@ -622,7 +636,7 @@ function asmdu() {
     printf("%25s%16s%16s\n", "Subdir", "Used MB", "Mirror MB");
     printf("%25s%16s%16s\n", "------", "-------", "---------");
     }
-    { printf("%15s%16s%16s\n", $1, $2, $3);
+    { printf("%25s%16s%16s\n", $1, $2, $3);
     use += $2;
     mir += $3;
     }
@@ -663,10 +677,9 @@ function ASMvsDB_DIFF(){
 
 
 function cr_pfile_from_spfile() {
-
-SPFILE_ASM=$(srvctl config database -d ${DBUNAME} | grep spfile | cut -d' ' -f2)
-#export ORACLE_HOME=
-echo -e "create pfile='/tmp/init@.ora' from spfile='${SPFILE_ASM}' ;" | sqlplus -S / as sysdba
+	SPFILE_ASM=$(srvctl config database -d ${DBUNAME} | grep spfile | cut -d' ' -f2)
+	#export ORACLE_HOME=
+	echo -e "create pfile='/tmp/init@.ora' from spfile='${SPFILE_ASM}' ;" | sqlplus -S / as sysdba
 }
 
 
@@ -688,6 +701,7 @@ alias lhtr='ls -alhtr'
 alias grep='grep --color=auto'
 #alias echopath='echo $PATH | tr : \\n'
 alias echopath='echo -e ${PATH//:/\\n}'
+alias lspath='echo -e ${PATH//:/\\n}'
 alias psg="ps aux | grep -v grep | grep -i"
 #alias dmesg='dmesg -H'
 alias vim='vim -u ${LIBDIR}/.vimrc'
@@ -839,6 +853,8 @@ du -sk ${filter} | sort -n | awk '
 '
 }
 
+## Find big files
+#find . -xdev -type f -size +50M -print | xargs ls -lh | sort -k5,5 -h -r | head
 
 alias nbfilebyday="stat -c "%y" * |cut -d' ' -f1|sort|uniq -c"
 alias nbhfilebyday="stat -c "%y" * .*|cut -d' ' -f1|sort|uniq -c|tr -d "-""
@@ -892,6 +908,16 @@ pathremove () {
     PATH=${PATH//:$1:/:}
     PATH=${PATH#:}
     PATH=${PATH%:}
+}
+
+
+## Locate Enhancement
+locd () {
+    locate -0 -b -A "$@" | xargs -0 -I {} bash -c '[ -d "{}" ] && echo "{}"'
+}
+
+locf () {
+    locate -0 -b -A "$@" | xargs -0 -I {} bash -c '[ -f "{}" ] && echo "{}"'
 }
 
 
@@ -1074,6 +1100,7 @@ function pshugepage () {
 	printf "SMAPS     : Process $@ using %.2f GB of HugePages\n" "${HP_SMAPS_GB}"
 }
 
+
 ## BASH COMPLETION
 # .inputrc
 bind 'set completion-query-items 300'
@@ -1098,6 +1125,9 @@ ORACLE_SID=$1
 echo ${ORACLE_SID}:${ORACLE_HOME}
 unset ORAENV_ASK
 # OR #. oraenv <<<${1}>/dev/null
+
+## FGR : To reload some alias
+fgenv -s
 }
 export -f oenv
 
@@ -1201,7 +1231,9 @@ BCT_ERROR_COLOR='91'
 #BCT_TIME_FORMAT='%b %d %I:%M%p'
 BCT_TIME_FORMAT='%a %b %d %H:%M:%S'
 BCT_MILLIS=1
-BCT_WRAP=0
+BCT_WRAP=1
+# FGR : Print the clock to the LEFT or RIGHT
+BCT_PRINT=LEFT
 
 if date +'%N' | grep -qv 'N'; then
   BCTTime="date '+%s%N'"
@@ -1312,7 +1344,12 @@ function BCTPostCommand() {
 
   # Move to the end of the line. This will NOT wrap to the next line
   # unless you have BCT_WRAP == 1
-  echo -ne "$wrap_space_prefix\033[${COLUMNS}C"
+  # FGR : Print the clock to the left or right
+  if [ -n "$BCT_PRINT" ] && [ $BCT_PRINT = "RIGHT" ]; then
+    echo -ne "$wrap_space_prefix\033[${COLUMNS}C"
+  elif [ -n "$BCT_PRINT" ] && [ $BCT_PRINT = "LEFT" ]; then
+    echo -ne "$wrap_space_prefix"
+  fi
   # Move back (length of output_str) columns.
   echo -ne "\033[${#output_str}D"
   # Finally, print output.

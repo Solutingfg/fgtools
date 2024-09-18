@@ -502,7 +502,7 @@ function ExecPrint_Result() {
 }
 
 if [ ! -z "${LOOP_TIMER}" ]; then
-    echo "Press [CTRL+C] to stop the loop ..."
+    #echo "Press [CTRL+C] to stop the loop ..."
     echo "${SGA_DBF_USAGE_HEADER}"
     while : 
     do
@@ -772,6 +772,11 @@ export SCREENRC=${LIBDIR}/.screenrc
 #ls -l | awk '{sum += $5} END {print sum}'
 
 
+function ethlink {
+  for i in 1 2 3 4 ; do echo "=== eth$i === : $(ethtool eth$i 2>&1 | egrep "Speed|Duplex|Link|Auto" | grep -Ev 'Unknown|Operation not permitted' | paste -s -)" ; done
+}
+
+
 ## TMUX
 alias tmux='tmux -f ${LIBDIR}/.tmux.conf'
 alias tms='tmux new -s'
@@ -791,11 +796,6 @@ export ANSIBLE_REMOTE_USER=root
 #export ANSIBLE_LIBRARY=${MYDIR}/../library
 #export ANSIBLE_MODULE_UTILS=${MYDIR}/../module_utils
 #export ANSIBLE_VAULT_PASSWORD_FILE=~/.vault_pass.txt
-
-
-function ethlink {
-  for i in 1 2 3 4 ; do echo "=== eth$i === : $(ethtool eth$i 2>&1 | egrep "Speed|Duplex|Link|Auto" | grep -Ev 'Unknown|Operation not permitted' | paste -s -)" ; done
-}
 
 
 ## Builtin Enhancement
@@ -1245,7 +1245,7 @@ BCT_ERROR_COLOR='91'
 #BCT_TIME_FORMAT='%b %d %I:%M%p'
 BCT_TIME_FORMAT='%a %b %d %H:%M:%S'
 BCT_MILLIS=1
-BCT_WRAP=1
+BCT_WRAP=0
 # FGR : Print the clock to the LEFT or RIGHT
 BCT_PRINT=LEFT
 
@@ -1362,7 +1362,10 @@ function BCTPostCommand() {
   if [ -n "$BCT_PRINT" ] && [ $BCT_PRINT = "RIGHT" ]; then
     echo -ne "$wrap_space_prefix\033[${COLUMNS}C"
   elif [ -n "$BCT_PRINT" ] && [ $BCT_PRINT = "LEFT" ]; then
-    echo -ne "$wrap_space_prefix"
+    #echo -ne "$wrap_space_prefix"
+    [ -n "$BCT_WRAP" ] && [ $BCT_WRAP -eq 0 ] \
+      && echo -ne "$wrap_space_prefix\033[${#output_str}C" \
+      || echo -ne "$wrap_space_prefix"
   fi
   # Move back (length of output_str) columns.
   echo -ne "\033[${#output_str}D"
@@ -1527,6 +1530,17 @@ function PostCommand() {
 
 ## Print command before execute
 #trap 'echo "# $BASH_COMMAND"' DEBUG
+
+
+function SQL_PROCESS() {
+echo $1
+SQL=$(cat <<-EOF
+echo -e $1
+EOF
+)
+echo SQL=$SQL
+}
+
 
 ## SAR
 #sar -n DEV 1 60 | grep -E 'Average:        IFACE|Average:    bondeth0.3375' | awk '{ print $1"  "$2"  "$5" "$6}' | column -t

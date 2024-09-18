@@ -95,14 +95,17 @@ case $(hostname --fqdn | cut -d'.' -f2- | tr '[:upper:]' '[:lower:]') in
     *prdres)  WELCOME_MSG+="\nEnvironnement : PRD"
         HL_COLOR=';41'
         HL_COLOR2=';47'
+        ENV=PRD
     ;;
     *intres)  WELCOME_MSG+="\nEnvironnement : HPR (INT)"
         HL_COLOR=
         HL_COLOR2=
+        ENV=HPR
     ;;
     *mapres)  WELCOME_MSG+="\nEnvironnement : HPR (MAP)"
         HL_COLOR=
         HL_COLOR2=
+        ENV=HPR
     ;;
 esac
 
@@ -609,8 +612,12 @@ function set_oracle_wallet(){
     echo "TNS_ADMIN=${TNS_ADMIN}"
 }
 
-function oracle_wallet(){
+function oracle_wallet_infra(){
     local REP_WALLET_INFRA
+    #hostname | grep prdres &>/dev/null && ENV=PRD
+    #hostname | grep intres &>/dev/null && ENV=HPR
+    [ "${ENV}" = "HPR" ] && local WALLET_PASSWD=${WALLET_PASSWD:-$(echo "aUZLVVcjSCQhdWhBdHVYCg==" | base64 -d)}
+    [ "${ENV}" = "PRD" ] && local WALLET_PASSWD=${WALLET_PASSWD:-$(echo "YXZTU2kjPWRhbUVzUWZHCg==" | base64 -d)}
     # FGR : #orapki wallet change_pwd -wallet ${REP_WALLET_INFRA} -oldpwd '<old_passwd>' -newpwd '<new_passwd>'
     if $(which --skip-alias mkstore &>/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
     REP_WALLET_INFRA="${TOOLKIT_DIR:-/prsyslib/toolunix/bin}/ora/wallet_infra"
@@ -645,6 +652,153 @@ function oracle_wallet(){
     [ "${action}" == "TEST_CNX" ] && echo "${WLT_ENTRY}"
     done
 }
+
+function oracle_wallet_db(){
+    local WALLET_PATH=${WALLET_PATH:-.}
+    local WALLET_PASSWD=${WALLET_PASSWD:-$(echo "Vk9QbkQ1SG00N3RXd0pUamU4awo=" | base64 -d)}
+    local WLT_DFT_ARGS='-nologo'
+    local action=${1:-PRINT}
+
+    if $(which --skip-alias mkstore &>/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
+    WALLET_PATH="${WALLET_PATH}"
+    echo "WALLET_PATH=${WALLET_PATH}"
+    #export TNS_ADMIN=${WALLET_PATH}
+    #echo "TNS_ADMIN=${TNS_ADMIN}"
+
+    if [ ! -f "${WALLET_PATH}/cwallet.sso" ] ; then echo -e '\nWallet is inaccessible or does not exist' ; return 1; fi
+    [ -z "${WALLET_PASSWD}" ] && read -p "Enter Wallet Password : " -s WALLET_PASSWD
+    #if ! $(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} -listCredential &>/dev/null) ; then echo 'Wrong Wallet password' ; fi
+    #if [ $(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -list | grep -c 'incorrect password') -ne 0 ] ; then echo 'Wrong Wallet password' ; return 1; fi
+
+    # orapki wallet display -wallet ${WALLET_PATH:-.}
+    # orapki wallet display -wallet ${WALLET_PATH:-.} | grep 'oracle.security.client' |  wc -l
+    array_wlt_check=( "$(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} ${WLT_DFT_ARGS} -list)" )
+    if [ $(echo "${array_wlt_check}" | grep -c 'incorrect password') -eq 1 ] ; then echo -e '\nWrong Wallet password' ; return 1; fi
+    if [ $(echo "${array_wlt_check}" | grep -c 'oracle.security.client') -eq 0 ] ; then echo -e '\nWallet Empty' ; return 1; fi
+    
+    ## FGR Done above #array_wlt_entries=( "$(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -list | grep client | sort -t. -Vk4.7,4 | grep oracle.security.client)" )
+    array_wlt_default=( $(echo "${array_wlt_check[@]}" | grep '\.default' | sort -rV) )
+    array_wlt_entries=( "$(echo "${array_wlt_check}" | grep client | sort -t. -Vk4.7,4 | grep oracle.security.client)" )
+    array_wlt_username=( $(echo "${array_wlt_entries}" | grep '\.username') )
+    array_wlt_password=( $(echo "${array_wlt_entries}" | grep '\.password') )
+    array_wlt_connect_string=( $(echo "${array_wlt_entries}" | grep '\.connect_string') )
+
+    array_wlt_entries_value=( "$(echo ${WALLET_PASSWD} | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} ${array_wlt_entries//oracle./-viewEntry oracle.} | grep oracle.security.client)" )
+    array_wlt_default_username_value=( $(echo "${array_wlt_entries_value}" | grep '\.default_username' | awk -F '= ' '{print $NF}') )
+    array_wlt_default_password_value=( $(echo "${array_wlt_entries_value}" | grep '\.default_password' | awk -F '= ' '{print $NF}') )
+    array_wlt_username_value=( $(echo "${array_wlt_entries_value}" | grep '\.username' | awk -F '= ' '{print $NF}') )
+    array_wlt_password_value=( $(echo "${array_wlt_entries_value}" | grep '\.password' | awk -F '= ' '{print $NF}') )
+    array_wlt_connect_string_value=( $(echo "${array_wlt_entries_value}" | grep '\.connect_string' | awk -F '= ' '{print $NF}') )
+
+    [ "${action}" == "DBG" ] && echo "DBG : Print Wallet Entries Sorted 'sort -t. -Vk4.7,4'"
+    [ "${action}" == "DBG" ] && (
+    echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -list | grep client | sort -t. -Vk4.7,4
+    echo -e "\narray_wlt_entries" && echo "${array_wlt_entries}"
+    echo -e "\narray_wlt_default" && echo "${array_wlt_default[@]}"
+    #echo -e "\narray_wlt_username" && echo -e "${array_wlt_username[@]//oracle./\noracle.}"
+    #echo -e "\narray_wlt_password" && echo -e "${array_wlt_password[@]//oracle./\noracle.}"
+    #echo -e "\narray_wlt_connect_string" && echo -e "${array_wlt_connect_string[@]//oracle./\noracle.}"
+
+    echo -e "\narray_wlt_entries_value" && echo "${array_wlt_entries_value}"
+    echo -e "\narray_wlt_default_value" && echo -e "${array_wlt_default_value[@]}"
+    echo -e "\narray_wlt_username_value" && echo -e "${array_wlt_username_value[@]}"
+    echo -e "\narray_wlt_password_value" && echo -e "${array_wlt_password_value[@]}"
+    echo -e "\narray_wlt_connect_string_value" && echo -e "${array_wlt_connect_string_value[@]}"
+    echo
+
+    ## Default Credential
+    # echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -viewEntry oracle.security.client.default_username | grep =
+    # echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -viewEntry oracle.security.client.default_password | grep =
+    
+    if [ "${#array_wlt_default[@]}" -gt "0" ] ; then 
+        echo "DBG DFT : ${array_wlt_default_username_value}/${array_wlt_default_password_value}"
+    fi
+    echo
+
+    for wlt_idx in "${!array_wlt_username[@]}" ; do 
+        #echo "idx[$wlt_idx] => ${array_wlt_username[$wlt_idx]} => ${array_wlt_username_value[$wlt_idx]}/${array_wlt_password_value[$wlt_idx]}@${array_wlt_connect_string_value[$wlt_idx]}" 
+        echo "DBG : ${array_wlt_username_value[$wlt_idx]}/${array_wlt_password_value[$wlt_idx]}@${array_wlt_connect_string_value[$wlt_idx]}"
+    done
+    )
+
+    echo
+    [ "${action}" == "CREATE_WALLET_COMMAND" ] && echo -e "# Create the Wallet :" && echo "echo -e \"\${WALLET_PASSWD}\n\${WALLET_PASSWD}\" | mkstore -wrl \${WALLET_PATH} ${WLT_DFT_ARGS} -create"
+    #orapki wallet create -wallet ${WALLET_PATH} -pwd ${WALLET_PASSWD} -auto_login
+    #echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} -createEntry oracle.security.client.default_username SYS
+    #echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} -createEntry oracle.security.client.default_password ${PASSWORD}
+    #echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} -list
+    #echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} -deleteEntry oracle.security.client.default_username
+    #echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} -deleteEntry oracle.security.client.default_password
+    #read -p "Enter SYS Password : " -s SYS_PASSWD ; /apps/dbatools/prod/script/ora_shared_wallet.ksh -I ${ORACLE_SID} -A ADD_DG -P ${SYS_PASSWD}
+    #/apps/dbatools/prod/script/ora_shared_wallet.ksh -I ${ORACLE_SID} -A ADD_DG -P gIVQJXDXDjEHWM6
+    # FGR : #orapki wallet change_pwd -wallet ${WALLET_PATH} -oldpwd '<old_passwd>' -newpwd '<new_passwd>'
+    echo
+
+    ## Loop Credentials
+    [ "${action}" != "DBG" ] && (
+    echo "# Default Credential :"
+    if [ "${#array_wlt_default[@]}" -gt 0 ] ; then 
+        [ "${action}" == "PRINT" ] && echo "${array_wlt_default_username_value}"
+        [ "${action}" == "PRINT_PWD" ] && echo "${array_wlt_default_username_value}/${array_wlt_default_password_value}"
+        [ "${action}" == "TEST_CNX" ] && ( timeout 5 echo exit | sqlplus -L -S ${array_wlt_default_username_value}/${array_wlt_default_password_value}@${array_wlt_connect_string_value} && echo "DFT : cnx_OK" || echo "DFT : cnx_KO" )
+        [ "${action}" == "CREATE_WALLET_COMMAND" ] && (
+            echo "echo \${WALLET_PASSWD} | mkstore -wrl \${WALLET_PATH} ${WLT_DFT_ARGS} -createEntry oracle.security.client.default_username ${array_wlt_default_username_value}"
+            echo "echo \${WALLET_PASSWD} | mkstore -wrl \${WALLET_PATH} ${WLT_DFT_ARGS} -createEntry oracle.security.client.default_password ${array_wlt_default_password_value}"
+        )
+    fi
+    echo
+    
+    echo "# Named Credential :"
+    #NBR_ENTRIES=$(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -listCredential | grep -c [0-9]:)
+    #for i in $(seq 1 ${NBR_ENTRIES}) ; do
+    for wlt_idx in "${!array_wlt_username[@]}" ; do
+        unset WLT_USERNAME WLT_PASSWORD WLT_CONNECT_STRING
+        #WLT_USERNAME=$(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH}  ${WLT_DFT_ARGS} -viewEntry oracle.security.client.username${i} | grep username${i} | awk -F '= ' '{print $NF}')
+        #WLT_PASSWORD=$(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH}  ${WLT_DFT_ARGS} -viewEntry oracle.security.client.password${i} | grep password${i} | awk -F '= ' '{print $NF}')
+        #WLT_CONNECT_STRING=$(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -viewEntry oracle.security.client.connect_string${i} | grep connect_string${i}| awk -F '= ' '{print $NF}')
+        WLT_USERNAME=${array_wlt_username_value[$wlt_idx]}
+        WLT_PASSWORD=/${array_wlt_password_value[$wlt_idx]}
+        WLT_CONNECT_STRING=@${array_wlt_connect_string_value[$wlt_idx]}
+
+        [ "${action}" == "PRINT" ] && echo "${WLT_USERNAME}${WLT_CONNECT_STRING}"
+        [ "${action}" == "PRINT_PWD" ] && echo "${WLT_USERNAME}${WLT_PASSWORD}${WLT_CONNECT_STRING}"
+
+        if [ "${action}" == "TEST_CNX" ] ; then
+            WLT_ENTRY="${WLT_USERNAME}${WLT_PASSWORD}${WLT_CONNECT_STRING}"
+            timeout 5 echo exit | sqlplus -L -S ${array_wlt_username_value[$wlt_idx]}/${array_wlt_password_value[$wlt_idx]}@${array_wlt_connect_string_value[$wlt_idx]} && WLT_ENTRY+=" : cnx_OK" || WLT_ENTRY+=" : cnx_KO"
+            echo "${WLT_ENTRY}"
+        fi
+
+        if [ "${action}" == "CREATE_WALLET_COMMAND" ] ; then
+            echo "echo \${WALLET_PASSWD} | mkstore -wrl \${WALLET_PATH} ${WLT_DFT_ARGS} -createCredential ${array_wlt_connect_string_value[$wlt_idx]} ${array_wlt_username_value[$wlt_idx]} ${array_wlt_password_value[$wlt_idx]}"
+            #echo "echo \${WALLET_PASSWD} | mkstore -wrl \${WALLET_PATH} \${WLT_DFT_ARGS} -createEntry ${array_wlt_connect_string_value[$wlt_idx]} ${array_wlt_username_value[$wlt_idx]} ${array_wlt_password_value[$wlt_idx]}"
+        fi
+    done
+    )
+}
+
+function oracle_wallet_dbatools(){
+    local WALLET_PATH=${WALLET_PATH:-/apps/oracle/${DBUNAME}/wallet/shared}
+    local WALLET_PASSWD=${WALLET_PASSWD:-$(echo "Vk9QbkQ1SG00N3RXd0pUamU4awo=" | base64 -d)}
+    local WLT_DFT_ARGS='-nologo'
+    local action=${1:-PRINT}
+    
+    if $(which --skip-alias mkstore &>/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
+    WALLET_PATH="${WALLET_PATH}"
+    echo "WALLET_PATH=${WALLET_PATH}"
+    #export TNS_ADMIN=${WALLET_PATH}
+    #echo "TNS_ADMIN=${TNS_ADMIN}"
+    
+    [ -z "${WALLET_PASSWD}" ] && read -p "Enter Wallet Password : " -s WALLET_PASSWD
+    if [ $(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -list | grep -c 'incorrect password') -ne 0 ] ; then echo 'Wrong Wallet password' ; return 1; fi
+    
+    [ "${action}" == "CREATE_WALLET_COMMAND" ] && echo "echo -e \"\${WALLET_PASSWD}\n\${WALLET_PASSWD}\" | mkstore -wrl ${WALLET_PATH} -create"
+    
+    if [ "${action}" == "CREATE_WALLET_COMMAND" ] ; then
+        echo "echo \${WALLET_PASSWD} | mkstore -wrl \${WALLET_PATH} \${WLT_DFT_ARGS} -createCredential ${WLT_CONNECT_STRING} ${WLT_USERNAME} ${WLT_PASSWORD}"
+    fi
+}
+
 
 function asmdu() {
 # https://blog.pythian.com/amcmd-better-du/
@@ -721,6 +875,7 @@ alias l='ls -ail'
 alias ll='ls -al'
 alias lt='ls -alt'
 alias ltr='ls -altr'
+alias ltrh='ls -altrh'
 alias lh='ls -alh'
 alias lht='ls -alht'
 alias lhtr='ls -alhtr'
@@ -752,7 +907,7 @@ alias screen='${BPCEIT_PATH}/bin/screen -h 50000'
 #alias screen='screen -h 50000'
 alias sc='screen -h 50000'
 alias scls='screen -ls'
-#alias scls='screen -ls | \grep "${1}"'
+alias sclsa='find /var/run/screen/ -type s'
 alias scr='screen -r'
 alias scs='screen -S'
 # Command SCRIPT is used as a workaround when not connected as root : "Cannot open your terminal '/dev/pts/0' - please check."

@@ -13,9 +13,10 @@
 #then
 #    [ -x "${BPCEIT_PATH}" ] && WORKDIR=${BPCEIT_PATH}
 #else
-    [ -h "${BASH_SOURCE}" ] && echo ${BASH_SOURCE} is a link && CURRENT_DIR=$(readlink ${BASH_SOURCE}) || CURRENT_DIR=${BASH_SOURCE}
-    WORKDIR=$(dirname ${CURRENT_DIR})
+    [ -h "${BASH_SOURCE}" ] && echo ${BASH_SOURCE} is a link && SOURCED_FILE_PATH=$(readlink ${BASH_SOURCE}) || SOURCED_FILE_PATH=${BASH_SOURCE}
+    WORKDIR=$(dirname ${SOURCED_FILE_PATH})
     [ -d "${WORKDIR}/../bin" ] && WORKDIR=$(dirname ${WORKDIR})
+    [ -z "${BPCEIT_PATH}" ] && BPCEIT_PATH=${WORKDIR}
 #fi
 
 BINDIR=${WORKDIR}/bin
@@ -33,15 +34,21 @@ LIBDIR=${WORKDIR}/lib
 
 
 ## IF EXADATA
-if [ $(hostname | grep "dbadm") ]; then
+if [ $(hostname | grep -E "dbadm|biexa|bizra") ]; then
   PLATFORM=ORACLE_APPLIANCE
-  [ $(hostname | grep "mez") ] && WELCOME_MSG="Plateforme : ZDLRA" 
-  [ $(hostname | grep -E "mex|bfx") ] && WELCOME_MSG="Plateforme : EXADATA"
-
+  [ $(hostname | grep "mez") ] && WELCOME_MSG="Plateform : ZDLRA" 
+  [ $(hostname | grep -E "mex|bfx") ] && WELCOME_MSG="Plateform : EXADATA"
+  [ $(hostname | grep "biexa") ] && WELCOME_MSG="Plateform : EXADATA Converge (CNVG)"
+  [ $(hostname | grep "bizra") ] && WELCOME_MSG="Plateform : ZDLRA Converge (CNVG)"
+  alias fgenv &>/dev/null || alias fgenv=". ${LIBDIR}/fgenv"
+  HN=$(hostname -s)
+  HN_BASE=${HN%?}
+  HN_NUM=${HN#${HN%?}}
+  HN_INT_APPL=$(hostname -A | awk -F. '{print $1}')
 ## FGR : Managed by prsyslib.sh #[ ! -d "/prsyslib" ] && [ $(grep -c "/oracle/scripts" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit
 else
   PLATFORM=LINUX
-  WELCOME_MSG="Plateforme : VIOLET (Hors Exadata)"
+  WELCOME_MSG="Plateform : VIOLET (Hors Exadata)"
   #export PATH=$PATH:${WORKDIR}/bin:.
   alias fgenv=". ${LIBDIR}/fgenv"
   [ ! -f /etc/profile.d/zz-fgenv.sh ] && [ $(id -u) -eq 0 ] && echo ln -s ${LIBDIR}/fgenv /etc/profile.d/zz-fgenv.sh
@@ -1390,6 +1397,15 @@ function pshugepage () {
 }
 
 
+function EXA_TEST_FLUX() {
+    EXA_CNVG_HPR="..." ; ENDPOINT_PORT=10198
+    EXA_CNVG_BCH="..." ; ENDPOINT_PORT=10198
+    EXA_CNVG_PRD="..." ; ENDPOINT_PORT=10098
+    for EXA_LIST in $(set | grep EXA_CNVG_ | cut -d= -f1); do 
+        echo "${EXA_LIST}=${!EXA_LIST}"
+        for endpoint in ${!EXA_LIST}; do echo "${endpoint}:${ENDPOINT_PORT} :" ; nc -vzw1 ${endpoint} ${ENDPOINT_PORT} 2>&1 | grep -v 'Version' ; done
+    done
+}
 ## BASH COMPLETION
 # .inputrc
 bind 'set completion-query-items 300'

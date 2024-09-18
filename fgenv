@@ -522,12 +522,23 @@ fi
 
 
 function oralisthome () {
+local FILTER
+[ ! -z "${1}" ] && FILTER="| grep ${1}"
 printf "%6s %-20s %-80s\n" "PID" "NAME" "ORACLE_HOME"
-pgrep -af _pmon_ |
+eval "pgrep -af _pmon_ ${FILTER}" |
   while read pid pname  y ; do
     printf "%6s %-20s %-80s\n" $pid $pname $(sudo ls -l /proc/$pid/exe | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//' | sort | uniq)
   done
 }
+
+
+oragetversionpid () {
+	local db
+	[ ! -z "${1}" ] && db=${1} || { echo "Arg is missing : DBNAME"; return 1; }
+	[ ${#db} -lt 8 ] && { echo "Arg must contain 8 char : \"${db}\""; return 1; }
+	sudo ls -l /proc/$(eval "pgrep -f ora_pmon_${db^^}")/exe | sed 's:.*/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*:\1.\2.\3.\4.\5:'
+}
+
 
 function oralistcnx () {
 ps -eo "args" | grep L[O]CAL=NO | sort | uniq -c
@@ -1135,20 +1146,28 @@ bind 'set completion-query-items 300'
 #alias oenv='script /dev/null -q -c "echo export ORAENV_ASK=NO;  export ORACLE_SID=$0; source /usr/local/bin/oraenv; echo ${ORACLE_SID}:${ORACLE_HOME}"'
 
 ## FUNCTIONS COMPLETION
-oenv()
-{
-ORAENV_ASK=NO
-ORACLE_SID=$1
-. oraenv >/dev/null
-echo ${ORACLE_SID}:${ORACLE_HOME}
-unset ORAENV_ASK
-# OR #. oraenv <<<${1}>/dev/null
+oenv() {
+    ORAENV_ASK=NO
+    ORACLE_SID=$1
+    . oraenv >/dev/null
+    echo ${ORACLE_SID}:${ORACLE_HOME}
+    unset ORAENV_ASK
+    # OR #. oraenv <<<${1}>/dev/null
 
-## FGR : To reload some alias
-fgenv -s
+    ## FGR : To reload some alias
+    fgenv -s
 }
 export -f oenv
 
+_word_list_instance() {
+## FGR 2023-11-06 : PGREG is Faster than PS
+#    [ -z "${word_list_instance}" ] && word_list_instance=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-10)
+    [ -z "${word_list_instance}" ] && word_list_instance=$(pgrep -a pmon | grep -v APX | cut -d'_' -f3- | cut -c1-10)
+#    [ -z "${word_list_dbname}" ] && word_list_dbname=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-8)
+#    [ -z "${word_list_dbname}" ] && word_list_dbname=$(pgrep -a pmon | grep -v APX | cut -d'_' -f3- | cut -c1-8)
+    word_list_bisudo=$(grep "^[^#|^$|^ *$]" ${SCRIPT_DIR}/ora/env/init.allow 2>/dev/null | cut -d' ' -f2 | uniq)
+}
+_word_list_instance
 
 _ora_completion() {
     local cur prev ante
@@ -1156,6 +1175,7 @@ _ora_completion() {
     cur=${COMP_WORDS[COMP_CWORD]}
     prev=${COMP_WORDS[COMP_CWORD-1]}
     ante=${COMP_WORDS[COMP_CWORD-2]}
+    first=${COMP_WORDS[0]}
     array_scripts=$(ls -p ${SCRIPT_DIR} | grep -v '/')
 #    array_scripts=$(grep "^[^#|^$|^ *$]" ${SCRIPT_DIR}/ora/env/init.allow | cut -d' ' -f2 | uniq -u)
 #    array_scripts_args=( "${array_scripts[@]//ora_shell.sh}" )
@@ -1164,13 +1184,15 @@ _ora_completion() {
     #word_list=$(crsctl status resource -w "TYPE = ora.database.type" -p|grep USR_ORA_INST_NAME|sed "s:.*=::"|sort -u)
     #word_list=$(grep -v -e "^#\|^ \|^$" /etc/oratab | cut -f1 -d: | paste -sd " " -)
     #word_list=$(grep -v -e "^#\|^ \|^$" /etc/oratab | cut -f1 -d: | grep "$(ps -eo args | grep pm[o]n | cut -d'_' -f3- | cut -c1-10)" | paste -sd " " -)
-    word_list_instance=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-10)
-    word_list_dbname=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-8)
-    word_list_bisudo=$(grep "^[^#|^$|^ *$]" ${SCRIPT_DIR}/ora/env/init.allow 2>/dev/null | cut -d' ' -f2 | uniq)
+#    word_list_instance=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-10)
+    [[ "${prev}" =~ "oenv" ]] && [ -z "${word_list_instance}" ] && word_list_instance=$(pgrep -a pmon | grep -v APX | cut -d'_' -f3- | cut -c1-10)
+#    word_list_dbname=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-8)
+    [[ "${prev}" =~ "sudo" ]] && [ -z "${word_list_dbname}" ] && word_list_dbname=$(pgrep -a pmon | grep -v APX | cut -d'_' -f3- | cut -c1-8)
+#    word_list_bisudo=$(grep "^[^#|^$|^ *$]" ${SCRIPT_DIR}/ora/env/init.allow 2>/dev/null | cut -d' ' -f2 | uniq)
     #word_list_scripts=$(ls -p ${SCRIPT_DIR} | grep -v '/')
     word_list_tns=$(grep '^[^ ].*=$' ${SCRIPT_DIR}/ora/wallet_infra/tnsnames.ora 2>/dev/null | cut -d= -f1)
 
-    [ -n "${DEBUG}" ] && echo "0=$0 1=$1 cur=$cur prev=$prev ante=$ante" #array_scripts="${array_scripts[@]}""
+    [ -n "${DEBUG}" ] && echo "0=$0 1=$1 cur=$cur prev=$prev ante=$ante first=$first" #array_scripts="${array_scripts[@]}""
 
     [[ "${prev}" =~ "oenv" ]] && COMPREPLY=( $(compgen -W "${word_list_instance}" -- $cur) ) && return
     [[ "${prev}" =~ "bisudo" ]] && COMPREPLY=( $(compgen -W "${word_list_bisudo}" -- $cur) ) && return
@@ -1194,6 +1216,7 @@ complete -F _ora_completion sqlplus srvctl exp expdp imp impdp
 #complete -F _ora_completion sql.sh dgmgrl.sh rman.sh rman_backup.sh rman_config.sh rman_config_to_tape.sh status_instance.sh status_backup.sh
 [ -x "${SCRIPT_DIR}" ] && complete -F _ora_completion $(ls -p ${SCRIPT_DIR} | grep -v '/' | grep '.sh$')
 #complete -F _ora_completion $(ls -p /oracle/exploit | grep -v '/' | grep '.sh$' ; ls -p /oracle/scripts | grep -v '/' | grep '.sh$')
+#complete -D -F _ora_completion oralisthome -o bashdefault -o nospace -o default
 
 ## FG : Allow "sudo" to complete
 #complete -cf sudo

@@ -228,7 +228,8 @@ then
       alias rlsqlc='SQLPATH=${ORACLE_PATH} rlwrap -f ${RLWRAP_DIR}/sqlplus_completions \sql / as sysdba @ login_noauto_sqlcl ${COLUMNS}'
       alias rlsqlasm='rlwrap -f ${RLWRAP_DIR}/sqlplus_completions sqlplus / as sysasm @ login_noauto ${COLUMNS}'
       alias sql='rlsql'
-      [ "${LOGNAME}" == "grid" ] && [[ "${ORACLE_SID^^}" ~= "ASM" ]] && alias sql='rlsqlasm'
+      #[ "${LOGNAME}" == "grid" ] && [[ "${ORACLE_SID^^}" ~= "ASM" ]] && alias sql='rlsqlasm'
+      [ "${LOGNAME}" == "grid" ] && alias sql='rlsqlasm'
       alias sqlc='rlsqlc'
       alias sqlasm='rlsqlasm'
       alias rmn='rlrman target /'
@@ -1712,6 +1713,21 @@ ${PS1_CURRENT}"
 
 
 #### FG : TODO ####
+## GIT Alias : git config --global alias.<alias_name> 'command'
+# Show git conf : git config --global -l
+# git config --global http.sslVerify "false"
+# git config --global credential.helper "store"
+## Set Alias
+# git config --global alias.gl 'config --global -l'
+# git config --global alias.changes '!git log --name-status HEAD..@{u}'
+# git config --global alias.diffpull '!git fetch && git diff HEAD..@{u}'
+# git config --global alias.st 'status -sb'
+# git config --global alias.ll 'log --oneline'
+# git config --global alias.last 'log -1 HEAD --stat'
+# git config --global alias.dv 'difftool -t vimdiff -y'
+# git config --global alias.se '!git rev-list --all | xargs git grep -F'
+# git config --global help.autocorrect 20
+
 function sudo_function () {
 export -f $1
 su $2 -c "bash -c $1"

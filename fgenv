@@ -25,18 +25,20 @@ LIBDIR=${WORKDIR}/lib
 [ $(grep -c "${WORKDIR}" <<< ${MANPATH}) -eq 0 ] && export MANPATH="$(manpath -g):${WORKDIR}/usr/share/man"
 
 
-## FGR : SCRIPT_DIR is from bienv.sh
+## FGR : SCRIPT_DIR is from /etc/profile.d/prsyslib.sh (previously from bienv.sh)
 #SCRIPT_DIR=${TOOLKIT_BIN:-/oracle/exploit}
 #[ -x /prsyslib/toolunix/bin ] && SCRIPT_DIR=/prsyslib/toolunix/bin
 #[ -x /oracle/exploit ] && SCRIPT_DIR=/oracle/exploit
-SCRIPT_DIR=${TOOLKIT_BIN:-$(dirname $(which --skip-alias ora_functions.sh &>/dev/null) &>/dev/null)}
+[ -z "${SCRIPT_DIR}" ] && SCRIPT_DIR=${TOOLKIT_BIN:-$(dirname $(which --skip-alias ora_functions.sh &>/dev/null) &>/dev/null)}
 
 
 ## IF EXADATA
 if [ $(hostname | grep "dbadm") ]; then
-  PLATFORM=EXADATA
-  [ $(hostname | grep "mezp") ] && WELCOME_MSG="Plateforme : ZDLRA" || WELCOME_MSG="Plateforme : ${PLATFORM}"
-#  [ ! -d "/prsyslib" ] && [ $(grep -c "/oracle/scripts" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit
+  PLATFORM=ORACLE_APPLIANCE
+  [ $(hostname | grep "mez") ] && WELCOME_MSG="Plateforme : ZDLRA" 
+  [ $(hostname | grep -E "mex|bfx") ] && WELCOME_MSG="Plateforme : EXADATA"
+
+## FGR : Managed by prsyslib.sh #[ ! -d "/prsyslib" ] && [ $(grep -c "/oracle/scripts" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit
 else
   PLATFORM=LINUX
   WELCOME_MSG="Plateforme : VIOLET (Hors Exadata)"
@@ -116,9 +118,9 @@ esac
 ## Software Collection flag
 [ -n "${X_SCLS}" ] && SCL_FLAG=$(echo -e " \e[1;35mscl:${X_SCLS}\e[0m") || unset SCL_FLAG
 ## Oracle Version
-#[ "${PLATFORM}" == "EXADATA" ] && ORA_VERSION='$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER")' && GRID_VERSION='$(ORAVER=${ORACLE_HOME##*/u01/app/};ORAVER=${ORAVER%/*};echo "$ORAVER")'
-[ "${PLATFORM}" == "EXADATA" ] && ORA_VERSION='$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER")' && GRID_VERSION='$(ORAVER=${ORACLE_HOME##*/u01/app/};echo "$ORAVER")'
-[ "${PLATFORM}" != "EXADATA" ] && ORA_VERSION='$(ORAVER=${ORACLE_HOME##*/tech/oracle/dbhome/};echo "$ORAVER")' && GRID_VERSION='$(ORAVER=${ORACLE_HOME##*/tech/oracle/grid/};echo "$ORAVER")'
+#[ "${PLATFORM}" == "ORACLE_APPLIANCE" ] && ORA_VERSION='$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER")' && GRID_VERSION='$(ORAVER=${ORACLE_HOME##*/u01/app/};ORAVER=${ORAVER%/*};echo "$ORAVER")'
+[ "${PLATFORM}" == "ORACLE_APPLIANCE" ] && ORA_VERSION='$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER")' && GRID_VERSION='$(ORAVER=${ORACLE_HOME##*/u01/app/};echo "$ORAVER")'
+[ "${PLATFORM}" != "ORACLE_APPLIANCE" ] && ORA_VERSION='$(ORAVER=${ORACLE_HOME##*/tech/oracle/dbhome/};echo "$ORAVER")' && GRID_VERSION='$(ORAVER=${ORACLE_HOME##*/tech/oracle/grid/};echo "$ORAVER")'
 ## FG : Decommenter pour avoir la date dans le prompt #DATE_PS1='[$(date "+%a %m/%d %H:%M:%S")]'
 
 case ${USER} in
@@ -189,6 +191,8 @@ then
     [ -f "${ORACLE_HOME}/suptools/oratop/oratop" ] && ORATOP_PATH=${ORACLE_HOME}/suptools/oratop || ORATOP_PATH=${BPCEIT_PATH}/bin
     alias oratop="${ORATOP_PATH}/oratop -f -r / as sysdba"
     alias alrt="echo /u01/app/oracle/diag/rdbms/$(echo ${ORACLE_SID:0:8}D* | tr '[:upper:]' '[:lower:]')/${ORACLE_SID}/trace/alert_${ORACLE_SID}.log"
+    alias alrttail="tail -100f /u01/app/oracle/diag/rdbms/$(echo ${ORACLE_SID:0:8}D* | tr '[:upper:]' '[:lower:]')/${ORACLE_SID}/trace/alert_${ORACLE_SID}.log"
+    alias alrtvi="view /u01/app/oracle/diag/rdbms/$(echo ${ORACLE_SID:0:8}D* | tr '[:upper:]' '[:lower:]')/${ORACLE_SID}/trace/alert_${ORACLE_SID}.log"
     IS_RLWRAP_IN_PATH=$(which --skip-alias rlwrap >/dev/null 2>&1; echo $?)
     IS_RLWRAP_IN_WORKDIR=$(test -x ${BINDIR}/rlwrap; echo $?)
     [ ${IS_RLWRAP_IN_PATH} == 0 ] && RLWRAP_BIN=rlwrap || echo "rlwrap binary not present or not executable : ${BINDIR}/rlwrap"
@@ -721,6 +725,8 @@ alias nmon14g=${BINDIR}/nmon14g_x86_rhel7
 # To avoid error : screen Cannot open your terminal '/dev/pts/0' - please check.
 #script /dev/null => bash -c '\''script /dev/null -q -c
 
+## FGR 2022-02-04 : Force the use of the custom screen in case other screen rpm is installed
+#alias screen='${BPCEIT_PATH}/bin/screen -h 50000'
 alias screen='screen -h 50000'
 alias sc='screen -h 50000'
 alias scls='screen -ls'

@@ -530,10 +530,11 @@ fi
 function oralisthome () {
 local FILTER
 [ ! -z "${1}" ] && FILTER="| grep ${1}"
-printf "%6s %-20s %-80s\n" "PID" "NAME" "ORACLE_HOME"
-eval "pgrep -af _pmon_ ${FILTER}" |
-  while read pid pname  y ; do
-    printf "%6s %-20s %-80s\n" $pid $pname $(sudo ls -l /proc/$pid/exe | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//' | sort | uniq)
+#printf "%6s %-20s %-80s\n" "PID" "NAME" "ORACLE_HOME"
+printf "%6s %-10s %-80s\n" "PID" "NAME" "ORACLE_HOME"
+eval "pgrep -af _pmon_ ${FILTER} | sort -k2,2" |
+  while read pid pname ; do
+    printf "%6s %-10s %-80s\n" $pid ${pname#???_pmon_} $(sudo ls -l /proc/$pid/exe | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//' | sort | uniq)
   done
 }
 
@@ -658,6 +659,7 @@ function oracle_wallet_infra(){
 
 function oracle_wallet_db(){
 [ -n "${DBG}" ] && set -x
+    local DBUNAME
     local WALLET_PATH=${WALLET_PATH:-.}
     local WALLET_PASSWD=${WALLET_PASSWD}
     local WLT_DFT_ARGS='-nologo'
@@ -746,8 +748,8 @@ function oracle_wallet_db(){
     echo
 
     ## Default Credential
-    # echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -viewEntry oracle.security.client.default_username | grep =
-    # echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -viewEntry oracle.security.client.default_password | grep =
+    # echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} ${WLT_DFT_ARGS} -viewEntry oracle.security.client.default_username | grep =
+    # echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} ${WLT_DFT_ARGS} -viewEntry oracle.security.client.default_password | grep =
     
     if [ "${#array_wlt_default[@]}" -gt "0" ] ; then 
         echo "DBG DFT : ${array_wlt_default_username_value}/${array_wlt_default_password_value}"

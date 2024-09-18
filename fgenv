@@ -179,6 +179,9 @@ done
 if [ "${LOGNAME}" == "oracle" -o "${LOGNAME}" == "grid" ]
 then
     GI_HOME=$(dirname $(ps -eo args | grep [o]cssd.bin) | awk '{print substr( $1, 1, length($1)-4)}')
+    #GI_BIN=$(dirname $(ps -eo args | grep [o]cssd.bin | awk '{print $1}' ))
+    GI_BIN=${GI_HOME}/bin
+    #export PATH=${PATH}:${GI_BIN}
     #.oracle_profile
     #export PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
     #export NLS_LANG=AMERICAN_AMERICA.WE8MSWIN1252
@@ -654,19 +657,54 @@ function oracle_wallet_infra(){
 }
 
 function oracle_wallet_db(){
+[ -n "${DBG}" ] && set -x
     local WALLET_PATH=${WALLET_PATH:-.}
-    local WALLET_PASSWD=${WALLET_PASSWD:-$(echo "Vk9QbkQ1SG00N3RXd0pUamU4awo=" | base64 -d)}
+    local WALLET_PASSWD=${WALLET_PASSWD}
     local WLT_DFT_ARGS='-nologo'
     local action=${1:-PRINT}
 
-    if $(which --skip-alias mkstore &>/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
-    WALLET_PATH="${WALLET_PATH}"
-    echo "WALLET_PATH=${WALLET_PATH}"
+    #if [ ! -f "${WALLET_PATH}/cwallet.sso" -o ! -f "${WALLET_PATH}/ewallet.p12" ] ; then echo -e '\nWallet is inaccessible or does not exist' ; return 1; fi
+    if [  -f "${WALLET_PATH}/cwallet.sso" -a -f "${WALLET_PATH}/ewallet.p12" ] ; then 
+        #[ -z "${WALLET_PASSWD}" ] && read -p "Enter Wallet Password : " -s WALLET_PASSWD
+        echo "Wallet Found : WALLET_PATH=${WALLET_PATH} => $(pwd)"
+    elif [ "${WALLET_PATH}" = "." -a -n "${ORACLE_SID}" ] ; then
+        [ -z "${DBUNAME}" ] && DBUNAME=$(srvctl config | grep ${ORACLE_SID:0:8})
+        WALLET_PATH=/apps/oracle/${DBUNAME}/wallet/shared
+        echo "Wallet Found : WALLET_PATH=${WALLET_PATH}"
+    else
+        echo -e '\nWallet is inaccessible or does not exist' 
+        return 1 
+    fi
+
+    [ "${WALLET_PATH}" = "." ] && local WALLET_PATH_TEST=$(pwd)
+    [[ "${WALLET_PATH_TEST:-$WALLET_PATH}" =~ "/wallet/shared" ]] && local ENV=CNVG
+
+    [ "${ENV}" = "HPR" ] && local WALLET_PASSWD=${WALLET_PASSWD:-$(echo "aUZLVVcjSCQhdWhBdHVYCg==" | base64 -d)}
+    [ "${ENV}" = "PRD" ] && local WALLET_PASSWD=${WALLET_PASSWD:-$(echo "YXZTU2kjPWRhbUVzUWZHCg==" | base64 -d)}
+    [ "${ENV}" = "CNVG" ] && local WALLET_PASSWD=${WALLET_PASSWD:-$(echo "Vk9QbkQ1SG00N3RXd0pUamU4awo=" | base64 -d)}
+
+    #[ -z "${DBUNAME}" ] && [ -z "${ORACLE_SID}" ] && { echo "ORACLE_SID not set"; return 1; }
+    #[ -z "${DBUNAME}" ] && DBUNAME=$(srvctl config | grep ${ORACLE_SID:0:8})
+    #WALLET_PATH=${WALLET_PATH:-/apps/oracle/${DBUNAME}/wallet/shared}
+    #echo "Wallet Found : WALLET_PATH=${WALLET_PATH}"
     #export TNS_ADMIN=${WALLET_PATH}
     #echo "TNS_ADMIN=${TNS_ADMIN}"
 
-    if [ ! -f "${WALLET_PATH}/cwallet.sso" ] ; then echo -e '\nWallet is inaccessible or does not exist' ; return 1; fi
-    [ -z "${WALLET_PASSWD}" ] && read -p "Enter Wallet Password : " -s WALLET_PASSWD
+    #if $(which --skip-alias mkstore &>/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
+    if ! $(which --skip-alias mkstore &>/dev/null); then 
+        echo "mkstore binary not is the path ... Searching ..."
+        #if MKSTORE_BIN_PATH=$(dirname `locate -be '\mkstore' | grep grid | tail -1`); 
+        #if MKSTORE_BIN_PATH=$(dirname `locate -be '\mkstore' | grep grid | tail -1`); then echo "MKSTORE_BIN_PATH=${MKSTORE_BIN_PATH}"; PATH=${PATH}:${MKSTORE_BIN_PATH}; else echo "! mkstore not found !"; return 0; fi
+        if MKSTORE_BIN_PATH=$(dirname `locate -be '\mkstore' | xargs ls -1t | grep grid | head -1`) ;
+            then echo "MKSTORE_BIN_PATH=${MKSTORE_BIN_PATH}"; PATH=${PATH}:${MKSTORE_BIN_PATH};
+            else echo "! mkstore not found !";
+            return 0
+        fi
+    #else 
+    #    #echo "ORACLE_HOME=${ORACLE_HOME}"
+    #    echo "MKSTORE_BIN_PATH=${MKSTORE_BIN_PATH}"
+    fi
+
     #if ! $(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} -listCredential &>/dev/null) ; then echo 'Wrong Wallet password' ; fi
     #if [ $(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -list | grep -c 'incorrect password') -ne 0 ] ; then echo 'Wrong Wallet password' ; return 1; fi
 
@@ -675,7 +713,8 @@ function oracle_wallet_db(){
     array_wlt_check=( "$(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} ${WLT_DFT_ARGS} -list)" )
     if [ $(echo "${array_wlt_check}" | grep -c 'incorrect password') -eq 1 ] ; then echo -e '\nWrong Wallet password' ; return 1; fi
     if [ $(echo "${array_wlt_check}" | grep -c 'oracle.security.client') -eq 0 ] ; then echo -e '\nWallet Empty' ; return 1; fi
-    
+    if [ $(echo "${array_wlt_check}" | grep -c 'Oracle Secret Store entries') -eq 1 ] ; then echo -e '\nReading the Wallet ...' ; fi
+
     ## FGR Done above #array_wlt_entries=( "$(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -list | grep client | sort -t. -Vk4.7,4 | grep oracle.security.client)" )
     array_wlt_default=( $(echo "${array_wlt_check[@]}" | grep '\.default' | sort -rV) )
     array_wlt_entries=( "$(echo "${array_wlt_check}" | grep client | sort -t. -Vk4.7,4 | grep oracle.security.client)" )
@@ -712,8 +751,8 @@ function oracle_wallet_db(){
     
     if [ "${#array_wlt_default[@]}" -gt "0" ] ; then 
         echo "DBG DFT : ${array_wlt_default_username_value}/${array_wlt_default_password_value}"
+        echo
     fi
-    echo
 
     for wlt_idx in "${!array_wlt_username[@]}" ; do 
         #echo "idx[$wlt_idx] => ${array_wlt_username[$wlt_idx]} => ${array_wlt_username_value[$wlt_idx]}/${array_wlt_password_value[$wlt_idx]}@${array_wlt_connect_string_value[$wlt_idx]}" 
@@ -721,17 +760,18 @@ function oracle_wallet_db(){
     done
     )
 
-    echo
-    [ "${action}" == "CREATE_WALLET_COMMAND" ] && echo -e "# Create the Wallet :" && echo "echo -e \"\${WALLET_PASSWD}\n\${WALLET_PASSWD}\" | mkstore -wrl \${WALLET_PATH} ${WLT_DFT_ARGS} -create"
+
+    [ "${action}" == "CREATE_WALLET_COMMAND" ] && echo && echo -e "# Create the Wallet :" && echo "echo -e \"\${WALLET_PASSWD}\n\${WALLET_PASSWD}\" | mkstore -wrl \${WALLET_PATH} ${WLT_DFT_ARGS} -create"
     #orapki wallet create -wallet ${WALLET_PATH} -pwd ${WALLET_PASSWD} -auto_login
     #echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} -createEntry oracle.security.client.default_username SYS
     #echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} -createEntry oracle.security.client.default_password ${PASSWORD}
     #echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} -list
     #echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} -deleteEntry oracle.security.client.default_username
     #echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} -deleteEntry oracle.security.client.default_password
+    # FGR : #orapki wallet change_pwd -wallet ${WALLET_PATH} -oldpwd '<old_passwd>' -newpwd '<new_passwd>'
     #read -p "Enter SYS Password : " -s SYS_PASSWD ; /apps/dbatools/prod/script/ora_shared_wallet.ksh -I ${ORACLE_SID} -A ADD_DG -P ${SYS_PASSWD}
     #/apps/dbatools/prod/script/ora_shared_wallet.ksh -I ${ORACLE_SID} -A ADD_DG -P gIVQJXDXDjEHWM6
-    # FGR : #orapki wallet change_pwd -wallet ${WALLET_PATH} -oldpwd '<old_passwd>' -newpwd '<new_passwd>'
+    #/apps/dbatools/prod/script/shared/ora_shared_wallet.ksh -I TBIOREX11 -A REMOVE_ZDLRA
     echo
 
     ## Loop Credentials
@@ -775,28 +815,91 @@ function oracle_wallet_db(){
         fi
     done
     )
+[ -n "${DBG}" ] && set +x
 }
 
 function oracle_wallet_dbatools(){
-    local WALLET_PATH=${WALLET_PATH:-/apps/oracle/${DBUNAME}/wallet/shared}
+[ -n "${DBG}" ] && set -x
+    local PATH=${PATH}
+    local WALLET_PATH
     local WALLET_PASSWD=${WALLET_PASSWD:-$(echo "Vk9QbkQ1SG00N3RXd0pUamU4awo=" | base64 -d)}
     local WLT_DFT_ARGS='-nologo'
+    local SYS_PASSWD=${SYS_PASSWD}
+    #local action=${1^^:-PRINT}
     local action=${1:-PRINT}
-    
-    if $(which --skip-alias mkstore &>/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
-    WALLET_PATH="${WALLET_PATH}"
+    [ "${action}" == "SET" ] && (
+        local SYS_PASSWD=${SYS_PASSWD:-$2}
+        [ -z "${SYS_PASSWD}" ] && read -p "Enter SYS Password : " -s SYS_PASSWD
+        [ -z "${SYS_PASSWD}" ] && { echo "! Variable SYS_PASSWD must be set !" ; return 1 ; }
+        )
+    echo 
+
+    #if $(which --skip-alias mkstore &>/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
+    if $(which --skip-alias mkstore &>/dev/null); then 
+        echo "ORACLE_HOME=${ORACLE_HOME}"
+    else 
+        echo "ORACLE_HOME not set"
+        echo "Searching for mkstore binary :"
+    #if BIN=$(dirname `locate -be '\mkstore' | grep grid | tail -1`); 
+    #if BIN=$(dirname `locate -be '\mkstore' | grep grid | tail -1`); then echo "BIN=${BIN}"; PATH=${PATH}:${BIN}; else echo "! mkstore not found !"; return 0; fi
+        if BIN=$(dirname `locate -be '\mkstore' | xargs ls -1t | grep grid | head -1`) ;
+            then echo "BIN=${BIN}"; PATH=${PATH}:${BIN};
+            else echo "! mkstore not found !";
+            return 0
+        fi
+    fi
+
+    [ -z "${DBUNAME}" ] && [ -z "${ORACLE_SID}" ] && { echo "ORACLE_SID not set"; return 1; }
+    [ -z "${DBUNAME}" ] && DBUNAME=$(srvctl config | grep ${ORACLE_SID:0:8})
+    WALLET_PATH=${WALLET_PATH:-/apps/oracle/${DBUNAME}/wallet/shared}
     echo "WALLET_PATH=${WALLET_PATH}"
     #export TNS_ADMIN=${WALLET_PATH}
     #echo "TNS_ADMIN=${TNS_ADMIN}"
-    
+
+    if [ ! -f "${WALLET_PATH}/cwallet.sso" -o ! -f "${WALLET_PATH}/ewallet.p12" ] ; then
+#        [ "${action}" == "CMD" ] && \
+          echo -e "# Create the Wallet :" #&& \
+          [ ! -d "${WALLET_PATH}" ] && echo "=> Create Wallet Directory : ${WALLET_PATH}" || echo "=> Wallet Directory EXIST : ${WALLET_PATH}"
+          echo "echo -e \"\${WALLET_PASSWD}\n\${WALLET_PASSWD}\" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -create"
+          #echo "echo -e \"${WALLET_PASSWD}\n${WALLET_PASSWD}\" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -create"
+
+          [ "${action}" == "SET" ] && (
+              [ ! -d "${WALLET_PATH}" ] && if mkdir -p ${WALLET_PATH} ; then echo "Wallet Directory Created : ${WALLET_PATH}"; else echo "Unable to create the Wallet Directory : ${WALLET_PATH}"; fi
+              echo -e "${WALLET_PASSWD}\n${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -create
+              )
+
+    fi
+
     [ -z "${WALLET_PASSWD}" ] && read -p "Enter Wallet Password : " -s WALLET_PASSWD
     if [ $(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -list | grep -c 'incorrect password') -ne 0 ] ; then echo 'Wrong Wallet password' ; return 1; fi
-    
-    [ "${action}" == "CREATE_WALLET_COMMAND" ] && echo "echo -e \"\${WALLET_PASSWD}\n\${WALLET_PASSWD}\" | mkstore -wrl ${WALLET_PATH} -create"
-    
-    if [ "${action}" == "CREATE_WALLET_COMMAND" ] ; then
-        echo "echo \${WALLET_PASSWD} | mkstore -wrl \${WALLET_PATH} \${WLT_DFT_ARGS} -createCredential ${WLT_CONNECT_STRING} ${WLT_USERNAME} ${WLT_PASSWORD}"
+    COUNT_DFT_CRED=$(orapki wallet display -wallet ${WALLET_PATH:-.} ${WLT_DFT_ARGS} | grep 'oracle.security.client.default' | wc -l)
+
+    if [ "${COUNT_DFT_CRED}" -eq 0 ] ; then
+        echo "# Create Default Credentials :"
+        #echo "echo \${WALLET_PASSWD} | mkstore -wrl \${WALLET_PATH} \${WLT_DFT_ARGS} -createCredential ${WLT_CONNECT_STRING} ${WLT_USERNAME} ${WLT_PASSWORD}"
+        echo "echo \${WALLET_PASSWD} | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -createEntry oracle.security.client.default_username SYS"
+        echo "echo \${WALLET_PASSWD} | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -createEntry oracle.security.client.default_password \${SYS_PASSWD}"
+
+        [ "${action}" == "SET" ] && (
+            echo ${WALLET_PASSWD} | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -createEntry oracle.security.client.default_username SYS  | grep -v 'Enter wallet password:'
+            echo ${WALLET_PASSWD} | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -createEntry oracle.security.client.default_password ${SYS_PASSWD}  | grep -v 'Enter wallet password:'
+            ) || return 0
+    elif [ "${COUNT_DFT_CRED}" -eq 2 ] ; then
+        echo "# Update Default Credentials Password :"
+            WLT_SYS_PASSWD=$(echo ${WALLET_PASSWD} | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -viewEntry oracle.security.client.default_password | grep '\.default_password' | awk -F '= ' '{print $NF}')
+            if [ "${SYS_PASSWD}" == "${WLT_SYS_PASSWD}" ] ; then
+                echo "=> SYS password is identical to the stored wallet password"
+                echo "echo \${WALLET_PASSWD} | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -modifyEntry oracle.security.client.default_password \${SYS_PASSWD}"
+
+                [ "${action}" == "SET" ] && [ -n "${FORCE}" ] && (
+                  [ "${action}" == "SET" ] && echo ${WALLET_PASSWD} | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -modifyEntry oracle.security.client.default_password ${SYS_PASSWD} | grep -v 'Enter wallet password:'
+                ) || return 0
+            else
+                echo "echo \${WALLET_PASSWD} | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -modifyEntry oracle.security.client.default_password \${SYS_PASSWD}"
+                [ "${action}" == "SET" ] && echo ${WALLET_PASSWD} | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -modifyEntry oracle.security.client.default_password ${SYS_PASSWD} | grep -v 'Enter wallet password:'
+            fi
     fi
+[ -n "${DBG}" ] && set +x
 }
 
 

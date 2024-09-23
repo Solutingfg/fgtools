@@ -52,6 +52,7 @@ if [ $(hostname | grep -E "dbadm|biexa|bizra") ]; then
   HN_NUM=${HN#${HN%?}}
   HN_INT_APPL=$(hostname -A | awk -F. '{print $1}')
   #HOSTNAME_NUM=$(v=$(hostname -s);echo ${v: -1})
+  #INSTANCE_NUM=$(v=$(hostname -s); [ $((${v: -1} % 2)) = 1 ] && echo 1 || echo 2)
 ## FGR : Managed by prsyslib.sh #[ ! -d "/prsyslib" ] && [ $(grep -c "/oracle/scripts" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit
 else
   PLATFORM=LINUX
@@ -89,7 +90,6 @@ fi
 # Violet 0;35       # Violet clair 1;35
 # Cyan   0;36       # Cyan clair   1;36
 # Brun 0;33
-# Jaune 1;33
 
 #case ${USER} in
 #    root)
@@ -198,7 +198,7 @@ then
     #GI_BIN=$(dirname $(ps -eo args | grep [o]cssd.bin | awk '{print $1}' ))
     GI_BIN=${GI_HOME}/bin
     #export PATH=${PATH}:${GI_BIN}
-    pathmunge ${GI_BIN} after
+    #pathmunge ${GI_BIN} after
     #.oracle_profile
     #export PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
     #export NLS_LANG=AMERICAN_AMERICA.WE8MSWIN1252
@@ -737,7 +737,7 @@ function oracle_wallet_db(){
     if [ $(echo "${array_wlt_check}" | grep -c 'oracle.security.client') -eq 0 ] ; then echo -e '\nWallet Empty' ; return 1; fi
     if [ $(echo "${array_wlt_check}" | grep -c 'Oracle Secret Store entries') -eq 1 ] ; then echo -e '\nReading the Wallet ...' ; fi
 
-    ## FGR Done above #array_wlt_entries=( "$(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -list | grep client | sort -t. -Vk4.7,4 | grep oracle.security.client)" )
+    ## FGR Done above #array_wlt_entries=( "$(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} ${WLT_DFT_ARGS} -list | grep client | sort -t. -Vk4.7,4 | grep oracle.security.client)" )
     array_wlt_default=( $(echo "${array_wlt_check[@]}" | grep '\.default' | sort -rV) )
     array_wlt_entries=( "$(echo "${array_wlt_check}" | grep client | sort -t. -Vk4.7,4 | grep oracle.security.client)" )
     array_wlt_username=( $(echo "${array_wlt_entries}" | grep '\.username') )
@@ -1004,6 +1004,8 @@ alias ltrh='ls -altrh'
 alias lh='ls -alh'
 alias lht='ls -alht'
 alias lhtr='ls -alhtr'
+alias lsinode="ls . -AiR1U | sed -rn '/^[./]/{h;n;}; G; s|^ *([0-9][0-9]*)[^0-9][^/]*([~./].*):|\1:\2|p' | sort -t : -uk1.1,1n | cut -d: -f2 | sort -V | uniq -c | sort -rn | head -n10"
+alias duinode="du --inodes --separate-dirs | sort -rh | sed -n '1,50{/^.\{71\}/s/^\(.\{30\}\).*\(.\{37\}\)$/\1...\2/;p}' | sort -r"
 alias grep='grep --color=auto'
 #alias echopath='echo $PATH | tr : \\n'
 alias echopath='echo -e ${PATH//:/\\n}'
@@ -1726,40 +1728,10 @@ ${PS1_CURRENT}"
 ## END - Print a clock
 
 
-#### FG : TODO ####
-## GIT Alias : git config --global alias.<alias_name> 'command'
-# Show git conf : git config --global -l
-# git config --global http.sslVerify "false"
-# git config --global credential.helper "store"
-## Set Alias
-# git config --global alias.gl 'config --global -l'
-# git config --global alias.changes '!git log --name-status HEAD..@{u}'
-# git config --global alias.diffpull '!git fetch && git diff HEAD..@{u}'
-# git config --global alias.st 'status -sb'
-# git config --global alias.ll 'log --oneline'
-# git config --global alias.last 'log -1 HEAD --stat'
-# git config --global alias.dv 'difftool -t vimdiff -y'
-# git config --global alias.se '!git rev-list --all | xargs git grep -F'
-# git config --global help.autocorrect 20
-
 function sudo_function () {
 export -f $1
 su $2 -c "bash -c $1"
 }
-
-## Search in traces :
-#    grep 'ns main err code: 12599' /u01/app/oracle/diag/rdbms/*/*/trace/alert*.log | sort|uniq -c|sort -n
-#    grep -cH 'ns main err code: 12599' /u01/app/oracle/diag/rdbms/*/*/trace/alert*.log | grep -E '_1|_2|11|12|13' | awk -F: '{print $2" "$1}' | sort -n | awk -F/ '{ print $0" : Is Instance Running: "("ps -ef | grep pm[o]n_"$8 | getline $ps); $ps}'
-# sed 's/[^"]*"\([^"]*\).*/\1/'
-#s - tells sed to substitute
-#/ - start of regex string to search for
-#[^"]* - any character that is not ", any number of times. (matching parameter name=)
-#" - just a ".
-#([^"]*) - anything inside () will be saved for reference to use later. The \ are there so the brackets are not considered as characters to search for. [^"]* means the same as above. (matching RemoteHost for example)
-#.* - any character, any number of times. (matching " access="readWrite"> /parameter)
-#/ - end of the search regex, and start of the substitute string.
-#\1 - reference to that string we found in the brackets above.
-#/ end of the substitute string.
 
 function highlight() {
     declare -A fg_color_map
@@ -1830,6 +1802,38 @@ Content-Type: text/html; charset="us-ascii"
 }
 
 
+#### FG : TODO ####
+## GIT Alias : git config --global alias.<alias_name> 'command'
+# Show git conf : git config --global -l
+# git config --global http.sslVerify "false"
+# git config --global credential.helper "store"
+## Set Alias
+# git config --global alias.gl 'config --global -l'
+# git config --global alias.changes '!git log --name-status HEAD..@{u}'
+# git config --global alias.diffpull '!git fetch && git diff HEAD..@{u}'
+# git config --global alias.st 'status -sb'
+# git config --global alias.ll 'log --oneline'
+# git config --global alias.last 'log -1 HEAD --stat'
+# git config --global alias.dv 'difftool -t vimdiff -y'
+# git config --global alias.se '!git rev-list --all | xargs git grep -F'
+# git config --global help.autocorrect 20
+
+
+## Search in traces :
+#    grep 'ns main err code: 12599' /u01/app/oracle/diag/rdbms/*/*/trace/alert*.log | sort|uniq -c|sort -n
+#    grep -cH 'ns main err code: 12599' /u01/app/oracle/diag/rdbms/*/*/trace/alert*.log | grep -E '_1|_2|11|12|13' | awk -F: '{print $2" "$1}' | sort -n | awk -F/ '{ print $0" : Is Instance Running: "("ps -ef | grep pm[o]n_"$8 | getline $ps); $ps}'
+# sed 's/[^"]*"\([^"]*\).*/\1/'
+#s - tells sed to substitute
+#/ - start of regex string to search for
+#[^"]* - any character that is not ", any number of times. (matching parameter name=)
+#" - just a ".
+#([^"]*) - anything inside () will be saved for reference to use later. The \ are there so the brackets are not considered as characters to search for. [^"]* means the same as above. (matching RemoteHost for example)
+#.* - any character, any number of times. (matching " access="readWrite"> /parameter)
+#/ - end of the search regex, and start of the substitute string.
+#\1 - reference to that string we found in the brackets above.
+#/ end of the substitute string.
+
+
 ## PROMPT BEFORE and AFTER a command
 # https://jichu4n.com/posts/debug-trap-and-prompt_command-in-bash/
 # This will run before any command is executed.
@@ -1888,5 +1892,19 @@ crsctl status res -w "TYPE = ora.service.type" |grep -v "^$"|awk -F "=" 'BEGIN {
  | sed -r 's:.*ONLINE on (.*):\1:g' | sort | uniq -c
 # Count per RSS type
 crsctl status res -w "TYPE = ora.service.type" -t | grep 'ONLINE  ONLINE' | sed -r 's:.*ONLINE  ONLINE(.*\w.* ).*:\1:g' | sort | uniq -c
+
+
+## IS CRS Autostart Enable or Disable
+root@mexi02dbadm01:~
+# dcli -l root -g ~/dbs_group 'ls -d /etc/oracle/scls_scr/* ; cat /etc/oracle/scls_scr/*/root/ohasdstr'
+mexi02dbadm01: /etc/oracle/scls_scr/mexi02dbadm01
+mexi02dbadm01: enable
+mexi02dbadm02: /etc/oracle/scls_scr/mexi02dbadm02
+mexi02dbadm02: enable
+mexi02dbadm03: /etc/oracle/scls_scr/mexi02dbadm03
+mexi02dbadm03: enable
+mexi02dbadm04: /etc/oracle/scls_scr/mexi02dbadm04
+mexi02dbadm04: enable
+
 
 #### END TODO #####

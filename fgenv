@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# History control
+#HISTFILE
+#HISTSIZE=10000
+#HISTFILESIZE=20000
+
 ## GENERAL
 [ "${1}" == "-s" ] && SILENT=TRUE || unset SILENT
 #TIMEFORMAT="Time Elapsed : %3Rs"
@@ -42,9 +47,11 @@ if [ $(hostname | grep -E "dbadm|biexa|bizra") ]; then
   [ $(hostname | grep "bizra") ] && WELCOME_MSG="Plateform : ZDLRA Converge (CNVG)"
   alias fgenv &>/dev/null || alias fgenv=". ${LIBDIR}/fgenv"
   HN=$(hostname -s)
+  #echo ${HN#${HN%?}}
   HN_BASE=${HN%?}
   HN_NUM=${HN#${HN%?}}
   HN_INT_APPL=$(hostname -A | awk -F. '{print $1}')
+  #HOSTNAME_NUM=$(v=$(hostname -s);echo ${v: -1})
 ## FGR : Managed by prsyslib.sh #[ ! -d "/prsyslib" ] && [ $(grep -c "/oracle/scripts" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit
 else
   PLATFORM=LINUX
@@ -75,11 +82,12 @@ fi
 ## PROMPT
 # Noir 0;30        # Blanc 1;37
 # Gris foncé 1;30  # Gris clair 0;37
-# Bleu 0;34        # Bleu clair 1;34
-# Vert 0;32        # Vert clair 1;32
-# Cyan 0;36        # Cyan clair 1;36
-# Rouge 0;31       # Rouge clair 1;31
-# Violet 0;35      # Violet clair 1;35
+# Rouge  0;31       # Rouge clair  1;31
+# Vert   0;32       # Vert clair   1;32
+# Jaune  0;33       # Jaune clair  1;33
+# Bleu   0;34       # Bleu clair   1;34
+# Violet 0;35       # Violet clair 1;35
+# Cyan   0;36       # Cyan clair   1;36
 # Brun 0;33
 # Jaune 1;33
 
@@ -93,6 +101,7 @@ fi
 #esac
 
 #export PS1='\[\e[1;31m\]\u\[\e[0;0m\]@\[\e[1;34m\]\h\[\e[0;0m\]:\w\$ '
+## FGR 2023-09 : To test# export PS1="\[\e[32m\]\$(printf %s%s\ %-\$((\$(tput cols)-12))s '## ' \$(date '+%d/%m/%y %H:%M:%S'))\[\e[0m\]\n\[\e[0;96m\]\u\[\e[0m\]@\[\e[0;93m\]\h:\[\e[0m\]\[\e[0;92m\]\W\[\e[0m\]# "
 
 #[ -z "$ORACLE_HOME" ] && unset ORAVER || ORAVER=${ORACLE_HOME##*/product/}; ORAVER=${ORAVER%/*}
 #ORAVER=$(ORAVER=${ORACLE_HOME##*/product/}; ORAVER=${ORAVER%/*}; echo $ORAVER)
@@ -189,6 +198,7 @@ then
     #GI_BIN=$(dirname $(ps -eo args | grep [o]cssd.bin | awk '{print $1}' ))
     GI_BIN=${GI_HOME}/bin
     #export PATH=${PATH}:${GI_BIN}
+    pathmunge ${GI_BIN} after
     #.oracle_profile
     #export PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
     #export NLS_LANG=AMERICAN_AMERICA.WE8MSWIN1252
@@ -307,8 +317,8 @@ function loopdb(){
   SQL_PARAM="WHENEVER SQLERROR EXIT SQL.SQLCODE\nset head off lines $[${COLUMNS}-${COLUMNS}/3] pages 0 trimout on\n"
   [ -n "${TIMING}" ] && SQL_PARAM+="set timing on\n"
 
-  column value new_val blksize
-  select value from v$parameter where name = 'db_block_size'
+  #column value new_val blksize
+  #select value from v$parameter where name = 'db_block_size'
   #ENVSQL="${ENVSQL}"
     #ENVSQL_HEADER="CPU_COUNT"
   DB_VERSION="SELECT VERSION FROM PRODUCT_COMPONENT_VERSION WHERE PRODUCT LIKE '%Oracle Database%';"
@@ -665,6 +675,8 @@ function oracle_wallet_infra(){
     done
 }
 
+# echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} ${WLT_DFT_ARGS} -viewEntry oracle.security.client.default_password | grep =
+
 function oracle_wallet_db(){
 [ -n "${DBG}" ] && set -x
     local DBUNAME
@@ -715,8 +727,8 @@ function oracle_wallet_db(){
     #    echo "MKSTORE_BIN_PATH=${MKSTORE_BIN_PATH}"
     fi
 
-    #if ! $(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} -listCredential &>/dev/null) ; then echo 'Wrong Wallet password' ; fi
-    #if [ $(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH} ${WLT_DFT_ARGS} -list | grep -c 'incorrect password') -ne 0 ] ; then echo 'Wrong Wallet password' ; return 1; fi
+    #if ! $(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} -listCredential &>/dev/null) ; then echo 'Wrong Wallet password' ; fi
+    #if [ $(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} ${WLT_DFT_ARGS} -list | grep -c 'incorrect password') -ne 0 ] ; then echo 'Wrong Wallet password' ; return 1; fi
 
     # orapki wallet display -wallet ${WALLET_PATH:-.}
     # orapki wallet display -wallet ${WALLET_PATH:-.} | grep 'oracle.security.client' |  wc -l
@@ -1020,6 +1032,7 @@ alias screen='${BPCEIT_PATH}/bin/screen -h 50000'
 #alias screen='screen -h 50000'
 alias sc='screen -h 50000'
 alias scls='screen -ls'
+#alias scls='screen -ls | \grep "${1}"'
 alias sclsa='find /var/run/screen/ -type s'
 alias scr='screen -r'
 alias scs='screen -S'
@@ -1114,7 +1127,6 @@ du -sk ${filter} | sort -n | awk '
     }
 '
 }
-
 
 function ts () {
 [ -n "$1" ] && filter="$*" || filter="*"
@@ -1387,14 +1399,14 @@ echo "Current HugePages Allocated : 2K hugepages = " $(cat /proc/sys/vm/nr_hugep
 
 
 function pshugepage () {
-	HUGEPAGECOUNT=0
-	for num in $(grep 'anon_hugepage.*dirty=' /proc/$@/numa_maps | awk '{print $6}' | sed 's/dirty=//') ; do
-		HUGEPAGECOUNT=$((HUGEPAGECOUNT+num))
-	done
-	echo "NUMA_MAPS : Process $@ using $(( ${HUGEPAGECOUNT} * 2048 / 1048576 )) GB of HugePages : (${HUGEPAGECOUNT} HugePages)"
+  HUGEPAGECOUNT=0
+  for num in $(grep 'anon_hugepage.*dirty=' /proc/$@/numa_maps | awk '{print $6}' | sed 's/dirty=//') ; do
+    HUGEPAGECOUNT=$((HUGEPAGECOUNT+num))
+  done
+  echo "NUMA_MAPS : Process $@ using $(( ${HUGEPAGECOUNT} * 2048 / 1048576 )) GB of HugePages : (${HUGEPAGECOUNT} HugePages)"
 
-	HP_SMAPS_GB=$(grep -B 11 'KernelPageSize:     2048 kB' /proc/$@/smaps | grep "^Size:" | awk 'BEGIN{sum=0}{sum+=$2}END{print sum/1048576}')
-	printf "SMAPS     : Process $@ using %.2f GB of HugePages\n" "${HP_SMAPS_GB}"
+  HP_SMAPS_GB=$(grep -B 11 'KernelPageSize:     2048 kB' /proc/$@/smaps | grep "^Size:" | awk 'BEGIN{sum=0}{sum+=$2}END{print sum/1048576}')
+  printf "SMAPS     : Process $@ using %.2f GB of HugePages\n" "${HP_SMAPS_GB}"
 }
 
 
@@ -1407,6 +1419,8 @@ function EXA_TEST_FLUX() {
         for endpoint in ${!EXA_LIST}; do echo "${endpoint}:${ENDPOINT_PORT} :" ; nc -vzw1 ${endpoint} ${ENDPOINT_PORT} 2>&1 | grep -v 'Version' ; done
     done
 }
+
+
 ## BASH COMPLETION
 # .inputrc
 bind 'set completion-query-items 300'
@@ -1429,7 +1443,7 @@ oenv() {
     . oraenv >/dev/null
     echo ${ORACLE_SID}:${ORACLE_HOME}
     unset ORAENV_ASK
-    # OR #. oraenv <<<${1}>/dev/null
+    # OR #ORAENV_ASK=YES . oraenv <<<${1} 1>/dev/null
 
     ## FGR : To reload some alias
     fgenv -s
@@ -1864,4 +1878,15 @@ echo SQL=$SQL
 ## SAR
 #sar -n DEV 1 60 | grep -E 'Average:        IFACE|Average:    bondeth0.3375' | awk '{ print $1"  "$2"  "$5" "$6}' | column -t
 #sar -n DEV 1 5 | grep -E 'Average:' | awk '{ print $1"  "$2"  "$5" "$6}' | sort |  column -t
+
+
+## CRSCTL grouping
+# List all RSS (line) 
+crsctl status res |grep -v "^$"|awk -F "=" 'BEGIN {print " "} {printf("%s",NR%4 ? $2"|" : $2"\n")}'|sed -e 's/  *, /,/g' -e 's/, /,/g'|awk -F "|" 'BEGIN { printf "%-40s%-35s%-20s%-50s\n","Resource Name","Resource Type","Target ","State" }{ split ($3,trg,",") split ($4,st,",")}{for (i in trg) {printf "%-40s%-35s%-20s%-50s\n",$1,$2,trg[i],st[i]}}' | sed -r 's:.*ONLINE on (.*):\1:g'
+# List RSS (group)
+crsctl status res -w "TYPE = ora.service.type" |grep -v "^$"|awk -F "=" 'BEGIN {print " "} {printf("%s",NR%4 ? $2"|" : $2"\n")}'|sed -e 's/  *, /,/g' -e 's/, /,/g'|awk -F "|" 'BEGIN { printf "%-40s%-35s%-20s%-50s\n","Resource Name","Resource Type","Target ","State" }{ split ($3,trg,",") split ($4,st,",")}{for (i in trg) {printf "%-40s%-35s%-20s%-50s\n",$1,$2,trg[i],st[i]}}' \
+ | sed -r 's:.*ONLINE on (.*):\1:g' | sort | uniq -c
+# Count per RSS type
+crsctl status res -w "TYPE = ora.service.type" -t | grep 'ONLINE  ONLINE' | sed -r 's:.*ONLINE  ONLINE(.*\w.* ).*:\1:g' | sort | uniq -c
+
 #### END TODO #####

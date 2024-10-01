@@ -659,6 +659,69 @@ FORMER_FUNCNAME=${FUNCNAME}
 }
 
 
+function asmdu() {
+# https://blog.pythian.com/amcmd-better-du/
+    D=$1
+    if [[ -z "$D" ]]; then
+        echo "Please provide a directory !"
+        return 1
+        #exit 1
+    fi
+
+    (for DIR in $(asmcmd ls ${D}); do
+        echo ${DIR} $(asmcmd du ${D}/${DIR} | tail -1)
+    done) | awk -v D="$D" '
+    BEGIN { printf("\n\t%30s\n\n", D " subdirectories size");
+    printf("%25s%16s%16s\n", "Subdir", "Used MB", "Mirror MB");
+    printf("%25s%16s%16s\n", "------", "-------", "---------");
+    }
+    { printf("%25s%16s%16s\n", $1, $2, $3);
+    use += $2;
+    mir += $3;
+    }
+    END { printf("\n\n%25s%16s%16s\n", "------", "-------", "---------");
+    printf("%25s%16s%16s\n\n", "Total", use, mir);
+    }'
+}
+
+
+function ASMvsDB_DIFF(){
+    [[ "${LOGNAME}" != "grid" ]] && echo "You must be connected as grid" && return 1
+    DG_DATA=DATAC1
+    DG_RECO=RECOC1
+
+    echo "DG_DATA = ${DG_DATA}"
+    echo "DG_RECO = ${DG_RECO}"
+    echo "CRS_DBUNAME = srvctl config"
+
+    ASMDIR_DATA=$(asmcmd ls ${DG_DATA} | sort | grep -E 'D1|D2' | sed s:/::)
+    ASMDIR_RECO=$(asmcmd ls ${DG_RECO} | sort | grep -E 'D1|D2' | sed s:/::)
+    CRS_DBUNAME=$(srvctl config | grep -E 'D1|D2')
+
+    echo -e "\nDifference between :\nASMDIR_DATA vs ASMDIR_RECO"
+    diff --suppress-common-lines -yW 27 <(echo "${ASMDIR_DATA}") <(echo "${ASMDIR_RECO}") | grep -v ','
+    unset DIFF_COUNT; DIFF_COUNT=$(diff <(echo "${ASMDIR_DATA}") <(echo "${ASMDIR_RECO}") | grep -vc ",")
+    [ "${DIFF_COUNT}" -eq 0 ] && echo "No difference : OK" #|| echo "Difference detected \"${DIFF_COUNT}\" : KO"
+
+    echo -e "\nDifference between :\nASMDIR_DATA vs CRS_DBUNAME"
+    diff --suppress-common-lines -yW 27 <(echo "${ASMDIR_DATA}") <(echo "${CRS_DBUNAME}") | grep -v ','
+    unset DIFF_COUNT; DIFF_COUNT=$(diff <(echo "${ASMDIR_DATA}") <(echo "${CRS_DBUNAME}") | grep -vc ",")
+    [ "${DIFF_COUNT}" -eq 0 ] && echo "No difference : OK" #|| echo "Difference detected \"${DIFF_COUNT}\" : KO"
+
+    echo -e "\nDifference between :\nASMDIR_RECO vs CRS_DBUNAME"
+    diff --suppress-common-lines -yW 27 <(echo "${ASMDIR_RECO}") <(echo "${CRS_DBUNAME}") | grep -v ','
+    unset DIFF_COUNT; DIFF_COUNT=$(diff <(echo "${ASMDIR_RECO}") <(echo "${CRS_DBUNAME}") | grep -vc ",")
+    [ "${DIFF_COUNT}" -eq 0 ] && echo "No difference : OK" #|| echo "Difference detected \"${DIFF_COUNT}\" : KO"
+}
+
+
+function cr_pfile_from_spfile() {
+	SPFILE_ASM=$(srvctl config database -d ${DBUNAME} | grep spfile | cut -d' ' -f2)
+	#export ORACLE_HOME=
+	echo -e "create pfile='/tmp/init@.ora' from spfile='${SPFILE_ASM}' ;" | sqlplus -S / as sysdba
+}
+
+
 function set_oracle_wallet(){
     local REP_WALLET_INFRA
     REP_WALLET_INFRA="${TOOLKIT_DIR:-/prsyslib/toolunix/bin}/ora/wallet_infra"
@@ -873,6 +936,14 @@ function oracle_wallet_db(){
 [ -n "${DBG}" ] && set +x
 }
 
+
+
+
+## DBATOOLS Integration
+# DBATools Source Environment
+alias dbtenv='. <(cat ~/.profile | grep -v PS1)'
+
+
 function oracle_wallet_dbatools(){
 [ -n "${DBG}" ] && set -x
     local PATH=${PATH}
@@ -958,67 +1029,25 @@ function oracle_wallet_dbatools(){
 }
 
 
-function asmdu() {
-# https://blog.pythian.com/amcmd-better-du/
-    D=$1
-    if [[ -z "$D" ]]; then
-        echo "Please provide a directory !"
-        return 1
-        #exit 1
-    fi
+# RMARCHMON Resource
+function lsarchmon {
+CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )` &&  ${CSSD_DIR}/crsctl stat res -w "( NAME coi prc. ) AND ( NAME en .arc )"|grep STATE|cut -d ',' -f1,2|sed 's/STATE=/archmon /';
+CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )` &&  ${CSSD_DIR}/crsctl stat res -w "( NAME coi prc.${ORACLE_SID:0:8} ) AND ( NAME en .arc )"|grep STATE|cut -d ',' -f1,2|sed 's/STATE=/archmon /';
+}
 
-    (for DIR in $(asmcmd ls ${D}); do
-        echo ${DIR} $(asmcmd du ${D}/${DIR} | tail -1)
-    done) | awk -v D="$D" '
-    BEGIN { printf("\n\t%30s\n\n", D " subdirectories size");
-    printf("%25s%16s%16s\n", "Subdir", "Used MB", "Mirror MB");
-    printf("%25s%16s%16s\n", "------", "-------", "---------");
-    }
-    { printf("%25s%16s%16s\n", $1, $2, $3);
-    use += $2;
-    mir += $3;
-    }
-    END { printf("\n\n%25s%16s%16s\n", "------", "-------", "---------");
-    printf("%25s%16s%16s\n\n", "Total", use, mir);
-    }'
+function lsarchmon_not_ONLINE {
+CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )` &&  ${CSSD_DIR}/crsctl stat res -w "( NAME coi prc. ) AND ( NAME en .arc ) AND (STATE != ONLINE)";
+}
+
+## DBMS.TAB
+function DBMS_TAB_DIFF {
+grep OB /etc/oratab|awk -F: '{printf("%8s %s\n",substr($1,0,8),$2);}'|sort -u >/tmp/temporatab
+grep OB /srv/dbatools/etc/dbms.tab|awk -F: '{printf("%8s %s\n",substr($2,0,8),$3);}'|sort -u >/tmp/tempdbmstab
+diff /tmp/temporatab /tmp/tempdbmstab|grep OB|awk '{print $2}'|sort -u
+rm /tmp/temporatab /tmp/tempdbmstab
 }
 
 
-function ASMvsDB_DIFF(){
-    [[ "${LOGNAME}" != "grid" ]] && echo "You must be connected as grid" && return 1
-    DG_DATA=DATAC1
-    DG_RECO=RECOC1
-
-    echo "DG_DATA = ${DG_DATA}"
-    echo "DG_RECO = ${DG_RECO}"
-    echo "CRS_DBUNAME = srvctl config"
-
-    ASMDIR_DATA=$(asmcmd ls ${DG_DATA} | sort | grep -E 'D1|D2' | sed s:/::)
-    ASMDIR_RECO=$(asmcmd ls ${DG_RECO} | sort | grep -E 'D1|D2' | sed s:/::)
-    CRS_DBUNAME=$(srvctl config | grep -E 'D1|D2')
-
-    echo -e "\nDifference between :\nASMDIR_DATA vs ASMDIR_RECO"
-    diff --suppress-common-lines -yW 27 <(echo "${ASMDIR_DATA}") <(echo "${ASMDIR_RECO}") | grep -v ','
-    unset DIFF_COUNT; DIFF_COUNT=$(diff <(echo "${ASMDIR_DATA}") <(echo "${ASMDIR_RECO}") | grep -vc ",")
-    [ "${DIFF_COUNT}" -eq 0 ] && echo "No difference : OK" #|| echo "Difference detected \"${DIFF_COUNT}\" : KO"
-
-    echo -e "\nDifference between :\nASMDIR_DATA vs CRS_DBUNAME"
-    diff --suppress-common-lines -yW 27 <(echo "${ASMDIR_DATA}") <(echo "${CRS_DBUNAME}") | grep -v ','
-    unset DIFF_COUNT; DIFF_COUNT=$(diff <(echo "${ASMDIR_DATA}") <(echo "${CRS_DBUNAME}") | grep -vc ",")
-    [ "${DIFF_COUNT}" -eq 0 ] && echo "No difference : OK" #|| echo "Difference detected \"${DIFF_COUNT}\" : KO"
-
-    echo -e "\nDifference between :\nASMDIR_RECO vs CRS_DBUNAME"
-    diff --suppress-common-lines -yW 27 <(echo "${ASMDIR_RECO}") <(echo "${CRS_DBUNAME}") | grep -v ','
-    unset DIFF_COUNT; DIFF_COUNT=$(diff <(echo "${ASMDIR_RECO}") <(echo "${CRS_DBUNAME}") | grep -vc ",")
-    [ "${DIFF_COUNT}" -eq 0 ] && echo "No difference : OK" #|| echo "Difference detected \"${DIFF_COUNT}\" : KO"
-}
-
-
-function cr_pfile_from_spfile() {
-	SPFILE_ASM=$(srvctl config database -d ${DBUNAME} | grep spfile | cut -d' ' -f2)
-	#export ORACLE_HOME=
-	echo -e "create pfile='/tmp/init@.ora' from spfile='${SPFILE_ASM}' ;" | sqlplus -S / as sysdba
-}
 
 
 ## ALIAS COMMON
@@ -1772,6 +1801,21 @@ alias listdbprmy='dbinfo | grep Open | grep $(hostname -s) | cut -d'.' -f2 | tr 
 #echo $LIST_INSTANCE | cut -d',' --complement -f1
 
 
+
+
+#### FG : TODO ####
+
+### FUNCTIONS : TODO
+function SQL_PROCESS() {
+echo $1
+SQL=$(cat <<-EOF
+echo -e $1
+EOF
+)
+echo SQL=$SQL
+}
+
+
 function SendMail() {
 	STATUS=$1
 	COMMENT=$2
@@ -1819,38 +1863,6 @@ Content-Type: text/html; charset="us-ascii"
 }
 
 
-#### FG : TODO ####
-## GIT Alias : git config --global alias.<alias_name> 'command'
-# Show git conf : git config --global -l
-# git config --global http.sslVerify "false"
-# git config --global credential.helper "store"
-## Set Alias
-# git config --global alias.gl 'config --global -l'
-# git config --global alias.changes '!git log --name-status HEAD..@{u}'
-# git config --global alias.diffpull '!git fetch && git diff HEAD..@{u}'
-# git config --global alias.st 'status -sb'
-# git config --global alias.ll 'log --oneline'
-# git config --global alias.last 'log -1 HEAD --stat'
-# git config --global alias.dv 'difftool -t vimdiff -y'
-# git config --global alias.se '!git rev-list --all | xargs git grep -F'
-# git config --global help.autocorrect 20
-
-
-## Search in traces :
-#    grep 'ns main err code: 12599' /u01/app/oracle/diag/rdbms/*/*/trace/alert*.log | sort|uniq -c|sort -n
-#    grep -cH 'ns main err code: 12599' /u01/app/oracle/diag/rdbms/*/*/trace/alert*.log | grep -E '_1|_2|11|12|13' | awk -F: '{print $2" "$1}' | sort -n | awk -F/ '{ print $0" : Is Instance Running: "("ps -ef | grep pm[o]n_"$8 | getline $ps); $ps}'
-# sed 's/[^"]*"\([^"]*\).*/\1/'
-#s - tells sed to substitute
-#/ - start of regex string to search for
-#[^"]* - any character that is not ", any number of times. (matching parameter name=)
-#" - just a ".
-#([^"]*) - anything inside () will be saved for reference to use later. The \ are there so the brackets are not considered as characters to search for. [^"]* means the same as above. (matching RemoteHost for example)
-#.* - any character, any number of times. (matching " access="readWrite"> /parameter)
-#/ - end of the search regex, and start of the substitute string.
-#\1 - reference to that string we found in the brackets above.
-#/ end of the substitute string.
-
-
 ## PROMPT BEFORE and AFTER a command
 # https://jichu4n.com/posts/debug-trap-and-prompt_command-in-bash/
 # This will run before any command is executed.
@@ -1886,14 +1898,37 @@ function PostCommand() {
 #trap 'echo "# $BASH_COMMAND"' DEBUG
 
 
-function SQL_PROCESS() {
-echo $1
-SQL=$(cat <<-EOF
-echo -e $1
-EOF
-)
-echo SQL=$SQL
-}
+### ALIASES : TODO
+## GIT Alias : git config --global alias.<alias_name> 'command'
+# Show git conf : git config --global -l
+# git config --global http.sslVerify "false"
+# git config --global credential.helper "store"
+## Set Alias
+# git config --global alias.gl 'config --global -l'
+# git config --global alias.changes '!git log --name-status HEAD..@{u}'
+# git config --global alias.diffpull '!git fetch && git diff HEAD..@{u}'
+# git config --global alias.st 'status -sb'
+# git config --global alias.ll 'log --oneline'
+# git config --global alias.last 'log -1 HEAD --stat'
+# git config --global alias.dv 'difftool -t vimdiff -y'
+# git config --global alias.se '!git rev-list --all | xargs git grep -F'
+# git config --global help.autocorrect 20
+
+
+### COMMANDS : TODO
+## Search in traces :
+#    grep 'ns main err code: 12599' /u01/app/oracle/diag/rdbms/*/*/trace/alert*.log | sort|uniq -c|sort -n
+#    grep -cH 'ns main err code: 12599' /u01/app/oracle/diag/rdbms/*/*/trace/alert*.log | grep -E '_1|_2|11|12|13' | awk -F: '{print $2" "$1}' | sort -n | awk -F/ '{ print $0" : Is Instance Running: "("ps -ef | grep pm[o]n_"$8 | getline $ps); $ps}'
+# sed 's/[^"]*"\([^"]*\).*/\1/'
+#s - tells sed to substitute
+#/ - start of regex string to search for
+#[^"]* - any character that is not ", any number of times. (matching parameter name=)
+#" - just a ".
+#([^"]*) - anything inside () will be saved for reference to use later. The \ are there so the brackets are not considered as characters to search for. [^"]* means the same as above. (matching RemoteHost for example)
+#.* - any character, any number of times. (matching " access="readWrite"> /parameter)
+#/ - end of the search regex, and start of the substitute string.
+#\1 - reference to that string we found in the brackets above.
+#/ end of the substitute string.
 
 
 ## SAR
@@ -1923,5 +1958,48 @@ mexi02dbadm03: enable
 mexi02dbadm04: /etc/oracle/scls_scr/mexi02dbadm04
 mexi02dbadm04: enable
 
+#### List item per Oracle version / Architecture / Process
+### Instances number
+#Répartition de toutes les instances par nœud :
+dcli -g ~/dbs_group -l root "ps -efu oracle | grep -c ora_pm[o]n"
+#Répartition de des instances RACOne par nœud :
+dcli -g ~/dbs_group -l root "ps -efu oracle | grep -Ec 'ora_pmon.*[0-9]_[1-2]{1}$'"
+#Répartition de des instances RAC2/3/4 par nœud :
+dcli -g ~/dbs_group -l root "ps -efu oracle | grep -Ec 'ora_pm[o]n_.*[0-9]{2}$'"
+#Répartition de des instances Standalone par nœud :
+dcli -g ~/dbs_group -l root "ps -efu oracle | grep -Ec 'ora_pmon.*[A-Z][0-9]{1}$'"
+#Répartition de toutes les instances 19c par nœud :
+## Using oralisthome
+dcli -g ~/dbs_group -l root ". /opt/bpce-it/lib/fgenv -s 2>/dev/null; oralisthome | grep -Ev 'grid|ORACLE_HOME' | awk -F' ' '{ print \$3}' | awk -F'/' '{ print \$6}' | sort | uniq -c | grep '19\.'"
+## Generic
+dcli -g ~/dbs_group -l root "ps -efu oracle | grep ora_pm[o]n | awk '{ print \$2 }' | xargs -IvPIDv ls -l /proc/vPIDv/exe | sed 's:.*/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*:\1.\2.\3.\4.\5:' | grep '19\.' | sort | uniq -c"
+#Répartition de des instances RACOne 19c par nœud :
+dcli -g ~/dbs_group -l root "ps -efu oracle | grep -E 'ora_pmon.*[0-9]_[1-2]{1}$' | awk '{ print \$2 }' | xargs -IvPIDv ls -l /proc/vPIDv/exe | sed 's:.*/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*:\1.\2.\3.\4.\5:' | grep '19\.' | sort | uniq -c"
+#Répartition de des instances RAC2/3/4 19c par nœud :
+dcli -g ~/dbs_group -l root "ps -efu oracle | grep -E 'ora_pm[o]n_.*[0-9]{2}$' | awk '{ print \$2 }' | xargs -IvPIDv ls -l /proc/vPIDv/exe | sed 's:.*/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*:\1.\2.\3.\4.\5:' | grep '19\.' | sort | uniq -c"
+#Répartition de des instances Standalone 19c par nœud :
+dcli -g ~/dbs_group -l root "ps -efu oracle | grep -E 'ora_pmon.*[A-Z][0-9]{1}$' | awk '{ print \$2 }' | xargs -IvPIDv ls -l /proc/vPIDv/exe | sed 's:.*/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*:\1.\2.\3.\4.\5:' | grep '19\.' | sort | uniq -c"
 
-#### END TODO #####
+### HugePages
+#Répartition des HugePages de toutes les instances par nœud en GB :
+dcli -g ~/dbs_group -l root "ps -efu oracle | grep -E 'ora_pm[o]n' | awk '{ print \$2 }' | xargs -IvPIDv grep -B 11 'KernelPageSize: *2048 kB' /proc/vPIDv/smaps | grep '^Size:' | awk 'BEGIN{sum=0}{sum+=\$2}END{printf(\"%.0f\n\",sum/1024/1024)}'"
+#Répartition des HugePages des instances RACOne par nœud en GB :
+dcli -g ~/dbs_group -l root "ps -efu oracle | grep -E 'ora_pmon.*[0-9]_[1-2]{1}$' | awk '{ print \$2 }' | xargs -IvPIDv grep -B 11 'KernelPageSize:.*2048 kB' /proc/vPIDv/smaps | grep '^Size:' | awk 'BEGIN{sum=0}{sum+=\$2}END{printf(\"%.0f\n\",sum/1024/1024)}'"
+#Répartition des HugePages des instances RAC2/3/4 par nœud en GB :
+dcli -g ~/dbs_group -l root "ps -efu oracle | grep -E 'ora_pm[o]n_.*[0-9]{2}$' | awk '{ print \$2 }' | xargs -IvPIDv grep -B 11 'KernelPageSize: *2048 kB' /proc/vPIDv/smaps | grep '^Size:' | awk 'BEGIN{sum=0}{sum+=\$2}END{printf(\"%.0f\n\",sum/1024/1024)}'"
+#HugePages par instance (top5) en GB :
+dcli -g ~/dbs_group -l root "for i in \$(ps -efu oracle | grep -E 'ora_pmon.*[A-Z][0-9]*$' | awk '{ print \$2\":\"\$NF}') ; do printf \"%-9s = \" \${i#*n_} ; grep -B11 'KernelPageSize: *2048 kB' /proc/\${i%:*}/smaps | awk '/^Size:/ {sum+=\$2}END{printf(\"%.0f\n\",sum/1024/1024)}'; done | sort -rnk3 | head -5"
+#HugePages par instance pour un node (top10) en GB :
+for i in $(ps -efu oracle | grep -E 'ora_pmon.*[A-Z][0-9]*$' | awk '{ print $2":"$NF}') ; do printf "%-9s = " ${i#*n_} ; grep -B11 'KernelPageSize: *2048 kB' /proc/${i%:*}/smaps | awk '/^Size:/ {sum+=$2}END{printf("%.0f\n",sum/1024/1024)}'; done | sort -nk3 | tail
+
+## Service
+. oraenv<<<crs
+#Répartition par nœud des services APPLI Oracle pour les bases 19c :
+for dbuname in $(crsctl status res -w " ( TYPE = ora.database.type ) && ( ORACLE_HOME coi 19.1 )" -p -attr NAME | sed -e '/^$/d' -e 's/^NAME=ora.\(.*\).db/\1 /'); do crsctl stat res ora.${dbuname}.${dbuname:0:8}_appli.svc | awk -v dbu=${dbuname} -v svc=${dbuname:0:8}_appli.svc -F= '/^STATE=/ { print dbu" "svc" "$2" "$3}'; done | awk '{ if ( $0 ~ /dbadm01/ ) { first++ } if ( $0 ~ /dbadm02/ ) { second++ } if ( $0 ~ /dbadm03/ ) { third++ } if ( $0 ~ /dbadm04/ ) { fourth++ } } END { print "mexi02dbadm01: "first "\nmexi02dbadm02: "second "\nmexi02dbadm03: "third "\nmexi02dbadm04: "fourth }'
+#Etat des lieux groupé des services APPLI Oracle pour les bases 19c 
+for dbuname in $(crsctl status res -w "(TYPE = ora.database.type) && (ORACLE_HOME coi 19.1)" -p -attr NAME | sed -e '/^$/d' -e 's/^NAME=ora.\(.*\).db/\1 /'); do eval "crsctl stat res ora.${dbuname}.${dbuname:0:8}_appli.svc | awk -v dbu=${dbuname} -v svc=${dbuname:0:8}_appli.svc -F= '/^STATE=/ { print dbu\" \"svc\" \"\$2\" \"\$3}'"; done | cut -d' ' -f3- | sort | uniq -c
+#Etat des lieux détaillé des services APPLI Oracle pour les bases 19c :
+for dbuname in $(crsctl status res -w " ( TYPE = ora.database.type ) && ( ORACLE_HOME coi 19.1 )" -p -attr NAME | sed -e '/^$/d' -e 's/^NAME=ora.\(.*\).db/\1 /'); do eval "crsctl stat res ora.${dbuname}.${dbuname:0:8}_appli.svc | awk -v dbu=${dbuname} -v svc=${dbuname:0:8}_appli.svc -F= '/^STATE=/ { print dbu\" \"svc\" \"\$2\" \"\$3}'"; done;
+
+
+#### END : TODO #####

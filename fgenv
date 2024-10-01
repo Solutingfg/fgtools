@@ -6,6 +6,27 @@
 #HISTFILESIZE=20000
 
 ## GENERAL
+# Functions
+
+function pathmunge () {
+## Add to PATH if not exists (default before or specify after)
+    if ! echo $PATH | /bin/egrep -q "(^|:)$1($|:)" ; then
+        if [ "$2" = "after" ] ; then
+            PATH=$PATH:$1
+        else
+            PATH=$1:$PATH
+        fi
+    fi
+}
+
+function pathremove () {
+    PATH=:$PATH:
+    PATH=${PATH//:$1:/:}
+    PATH=${PATH#:}
+    PATH=${PATH%:}
+}
+
+
 [ "${1}" == "-s" ] && SILENT=TRUE || unset SILENT
 #TIMEFORMAT="Time Elapsed : %3Rs"
 
@@ -25,8 +46,14 @@
 #fi
 
 BINDIR=${WORKDIR}/bin
+EXADATADIR=${WORKDIR}/exadata
+ZDLRADIR=${WORKDIR}/zdlra
+APPLIANCEDIR=${WORKDIR}/appliance
 LIBDIR=${WORKDIR}/lib
 [ $(grep -c "${BINDIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${BINDIR}:.
+[ $(grep -c "${EXADATADIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${EXADATADIR}:.
+[ $(grep -c "${ZDLRADIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${ZDLRADIR}:.
+[ $(grep -c "${APPLIANCEDIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${APPLIANCEDIR}:.
 [ $(grep -c "${LIBDIR}" <<< ${LD_LIBRARY_PATH}) -eq 0 ] && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${LIBDIR}
 [ $(grep -c "${WORKDIR}" <<< ${MANPATH}) -eq 0 ] && export MANPATH="$(manpath -g):${WORKDIR}/usr/share/man"
 
@@ -43,8 +70,9 @@ if [ $(hostname | grep -E "dbadm|biexa|bizra") ]; then
   PLATFORM=ORACLE_APPLIANCE
   [ $(hostname | grep "mez") ] && WELCOME_MSG="Plateform : ZDLRA" 
   [ $(hostname | grep -E "mex|bfx") ] && WELCOME_MSG="Plateform : EXADATA"
-  [ $(hostname | grep "biexa") ] && WELCOME_MSG="Plateform : EXADATA Converge (CNVG)"
-  [ $(hostname | grep "bizra") ] && WELCOME_MSG="Plateform : ZDLRA Converge (CNVG)"
+  [ $(hostname | grep "dbadm") ] && WELCOME_MSG+=" BPCE-IT Legacy (VIOLET)"
+  [ $(hostname | grep "biexa") ] && WELCOME_MSG="Plateform : EXADATA Converged (CNVG)"
+  [ $(hostname | grep "bizra") ] && WELCOME_MSG="Plateform : ZDLRA Converged (CNVG)"
   alias fgenv &>/dev/null || alias fgenv=". ${LIBDIR}/fgenv"
   HN=$(hostname -s)
   #echo ${HN#${HN%?}}
@@ -89,7 +117,8 @@ fi
 # Bleu   0;34       # Bleu clair   1;34
 # Violet 0;35       # Violet clair 1;35
 # Cyan   0;36       # Cyan clair   1;36
-# Brun 0;33
+# Blanc  0;37       # Blanc clair  1;37
+
 
 #case ${USER} in
 #    root)
@@ -194,11 +223,14 @@ done
 ## ORACLE
 if [ "${LOGNAME}" == "oracle" -o "${LOGNAME}" == "grid" ]
 then
-    GI_HOME=$(dirname $(ps -eo args | grep [o]cssd.bin) | awk '{print substr( $1, 1, length($1)-4)}')
+    ## FGR : To speedup GI_HOME lookup : use of oratab first then search the path from the process ocssd.bin
+    GI_HOME=$(awk -F: '/+ASM/ {print $2}' /etc/oratab)
+    [ -d "${GI_HOME}/bin" ] || GI_HOME=$(dirname $(ps -eo args | grep [o]cssd.bin) | awk '{print substr( $1, 1, length($1)-4)}')
+    #GI_HOME=$(dirname $(ps -eo args | grep [o]cssd.bin) | awk '{print substr( $1, 1, length($1)-4)}')
     #GI_BIN=$(dirname $(ps -eo args | grep [o]cssd.bin | awk '{print $1}' ))
     GI_BIN=${GI_HOME}/bin
     #export PATH=${PATH}:${GI_BIN}
-    #pathmunge ${GI_BIN} after
+    pathmunge ${GI_BIN} after
     #.oracle_profile
     #export PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
     #export NLS_LANG=AMERICAN_AMERICA.WE8MSWIN1252
@@ -674,6 +706,7 @@ function oracle_wallet_infra(){
     [ "${action}" == "TEST_CNX" ] && echo "${WLT_ENTRY}"
     done
 }
+
 
 # echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} ${WLT_DFT_ARGS} -viewEntry oracle.security.client.default_password | grep =
 
@@ -1203,25 +1236,6 @@ adGetgroupInfo () {
 nfsgetacl() { nfs4_getfacl "$@" | grep -Ev "OWNER|GROUP|EVERYONE"; };
 
 
-pathmunge () {
-## Add to PATH if not exists (default before or specify after)
-    if ! echo $PATH | /bin/egrep -q "(^|:)$1($|:)" ; then
-        if [ "$2" = "after" ] ; then
-            PATH=$PATH:$1
-        else
-            PATH=$1:$PATH
-        fi
-    fi
-}
-
-pathremove () {
-    PATH=:$PATH:
-    PATH=${PATH//:$1:/:}
-    PATH=${PATH#:}
-    PATH=${PATH%:}
-}
-
-
 ## Locate Enhancement
 locd () {
     locate -0 -b -A "$@" | xargs -0 -I {} bash -c '[ -d "{}" ] && echo "{}"'
@@ -1296,15 +1310,15 @@ function MemRpt () {
     local SHMALL=$(cat /proc/sys/kernel/shmall)
 
     if [ "${INT}" == "1" ]; then
-    local SHM_TOTAL_GB=$(( ${PAGE_SIZE} * ${SHMALL} / 1073741824 ))
+    local SHM_LIMIT_GB=$(( ${PAGE_SIZE} * ${SHMALL} / 1073741824 ))
     local SHM_USED_GB=$(ipcs -m | grep oracle | awk '{sum += $5} END {printf "%.0f", sum/1073741824}')
-    local SHM_FREE_GB=$(( ${SHM_TOTAL_GB} - ${SHM_USED_GB} ))
+    local SHM_FREE_GB=$(( ${SHM_LIMIT_GB} - ${SHM_USED_GB} ))
     elif [ "${FLOAT}" == "1" ]; then
-    local SHM_TOTAL_GB=$(echo "${BC_SCALE} ${PAGE_SIZE} * ${SHMALL} / 1073741824" | bc)
+    local SHM_LIMIT_GB=$(echo "${BC_SCALE} ${PAGE_SIZE} * ${SHMALL} / 1073741824" | bc)
     local SHM_USED_GB=$(ipcs -m | grep oracle | awk '{sum += $5} END {printf "%.0f", sum/1073741824}')
-    local SHM_FREE_GB=$(echo "${BC_SCALE} ${SHM_TOTAL_GB} - ${SHM_USED_GB}" | bc)
+    local SHM_FREE_GB=$(echo "${BC_SCALE} ${SHM_LIMIT_GB} - ${SHM_USED_GB}" | bc)
     fi
-    echo "Shared_Memory_Limit GB : ${SHM_TOTAL_GB}"
+    echo "Shared_Memory_Limit GB : ${SHM_LIMIT_GB}"
     echo "Shared_Memory_Used  GB : ${SHM_USED_GB}"
     echo "Shared_Memory_Free  GB : ${SHM_FREE_GB}"
 
@@ -1407,7 +1421,7 @@ function pshugepage () {
   done
   echo "NUMA_MAPS : Process $@ using $(( ${HUGEPAGECOUNT} * 2048 / 1048576 )) GB of HugePages : (${HUGEPAGECOUNT} HugePages)"
 
-  HP_SMAPS_GB=$(grep -B 11 'KernelPageSize:     2048 kB' /proc/$@/smaps | grep "^Size:" | awk 'BEGIN{sum=0}{sum+=$2}END{print sum/1048576}')
+  HP_SMAPS_GB=$(grep -B 11 'KernelPageSize: *2048 kB' /proc/$@/smaps | grep "^Size:" | awk 'BEGIN{sum=0}{sum+=$2}END{print sum/1048576}')
   printf "SMAPS     : Process $@ using %.2f GB of HugePages\n" "${HP_SMAPS_GB}"
 }
 
@@ -1452,6 +1466,7 @@ oenv() {
 }
 export -f oenv
 
+
 _word_list_instance() {
 ## FGR 2023-11-06 : PGREG is Faster than PS
 #    [ -z "${word_list_instance}" ] && word_list_instance=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-10)
@@ -1461,6 +1476,7 @@ _word_list_instance() {
     word_list_bisudo=$(grep "^[^#|^$|^ *$]" ${SCRIPT_DIR}/ora/env/init.allow 2>/dev/null | cut -d' ' -f2 | uniq)
 }
 _word_list_instance
+
 
 _ora_completion() {
     local cur prev ante
@@ -1732,6 +1748,7 @@ function sudo_function () {
 export -f $1
 su $2 -c "bash -c $1"
 }
+
 
 function highlight() {
     declare -A fg_color_map

@@ -8,7 +8,7 @@
 ## GENERAL
 # Functions
 
-function pathmunge () {
+function pathmunge {
 ## Add to PATH if not exists (default before or specify after)
     if ! echo $PATH | /bin/egrep -q "(^|:)$1($|:)" ; then
         if [ "$2" = "after" ] ; then
@@ -19,7 +19,7 @@ function pathmunge () {
     fi
 }
 
-function pathremove () {
+function pathremove {
     PATH=:$PATH:
     PATH=${PATH//:$1:/:}
     PATH=${PATH#:}
@@ -109,15 +109,15 @@ fi
 
 
 ## PROMPT
-# Noir 0;30        # Blanc 1;37
-# Gris foncé 1;30  # Gris clair 0;37
-# Rouge  0;31       # Rouge clair  1;31
-# Vert   0;32       # Vert clair   1;32
-# Jaune  0;33       # Jaune clair  1;33
-# Bleu   0;34       # Bleu clair   1;34
-# Violet 0;35       # Violet clair 1;35
-# Cyan   0;36       # Cyan clair   1;36
-# Blanc  0;37       # Blanc clair  1;37
+# Noir        0;30  # Blanc 1;37
+# Gris foncé  1;30  # Gris clair 0;37
+# Rouge       0;31  # Rouge clair  1;31
+# Vert        0;32  # Vert clair   1;32
+# Jaune       0;33  # Jaune clair  1;33
+# Bleu        0;34  # Bleu clair   1;34
+# Violet      0;35  # Violet clair 1;35
+# Cyan        0;36  # Cyan clair   1;36
+# Blanc       0;37  # Blanc clair  1;37
 
 
 #case ${USER} in
@@ -204,7 +204,7 @@ esac
 export PS4='$0.$LINENO+ '
 
 ## COLOR
-function display_all_colors_16()
+function display_all_colors_16
 {
 for clbg in {40..47} {100..107} 49 ; do
     #Foreground
@@ -292,12 +292,12 @@ alias env12='. ${LIBDIR}/env12.sh'
 [ -n "${ORACLE_HOME}" ] && alias opatch='${ORACLE_HOME}/OPatch/opatch'
 
 
-function loopdb(){
-  set +x
+function loopdb {
+#  set +x
   local DB_FILTER ORAVERFILTER VERBOSE=0 DEBUG SQL_COLLECTION HEADER DEFINED_HEADER OPEN_ONLY TIMING
   SQL_COLLECTION=${1} ; shift 1
 
-  function Usage() {
+  function Usage {
   echo "Usage : ${FUNCTNAME} [query template] [options]
   Query template :
   IS_DTG, SGA_DBF_USAGE, DBPSU
@@ -468,7 +468,7 @@ function loopdb(){
 
 
 
-function loopdb_tmp(){
+function loopdb_tmp {
   unset DB_FILTER VERBOSE DEBUG LOOP_TIMER
   SQL_COLLECTION=${1} ; shift 1
 
@@ -545,7 +545,7 @@ SELECT TO_CHAR(SYSDATE,'YYYY-MM-DD')||';'||TO_CHAR(SYSDATE,'HH24:MI')||';'||(sel
   [[ "${VERBOSE}" == "YES" ]] && HEADER="${SQL_COLLECTION} : ${!SQL_COLLECTION}"
   QUERYRAW="${!SQL_COLLECTION}"    QUERY2EXEC="${SQL_PARAM}${QUERYRAW}"
 
-function ExecPrint_Result() {
+function ExecPrint_Result {
   for SID in $(ps -eo args | grep pm[o]n_"${DB_FILTER}" | cut -d'_' -f3- | grep -v "^+\|^-\|^$\|^DBA" | sort); do . oraenv <<<${SID}>/dev/null
     ORA_VERSION=$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER")
     [ ! -z "${ORAVERFILTER}" ] && [[ ! ${ORA_VERSION} =~ ${ORAVERFILTER} ]] && continue
@@ -577,7 +577,7 @@ fi
 }
 
 
-function oralisthome () {
+function oralisthome {
 local FILTER
 [ ! -z "${1}" ] && FILTER="| grep ${1}"
 #printf "%6s %-20s %-80s\n" "PID" "NAME" "ORACLE_HOME"
@@ -589,20 +589,20 @@ eval "pgrep -af _pmon_ ${FILTER} | sort -k2,2" |
 }
 
 
-oragetversionpid () {
-	local db
-	[ ! -z "${1}" ] && db=${1} || { echo "Arg is missing : DBNAME"; return 1; }
-	[ ${#db} -lt 8 ] && { echo "Arg must contain 8 char : \"${db}\""; return 1; }
-	sudo ls -l /proc/$(eval "pgrep -f ora_pmon_${db^^}")/exe | sed 's:.*/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*:\1.\2.\3.\4.\5:'
+oragetversionpid {
+  local db
+  [ ! -z "${1}" ] && db=${1} || { echo "Arg is missing : DBNAME"; return 1; }
+  [ ${#db} -lt 8 ] && { echo "Arg must contain 8 char : \"${db}\""; return 1; }
+  sudo ls -l /proc/$(eval "pgrep -f ora_pmon_${db^^}")/exe | sed 's:.*/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*:\1.\2.\3.\4.\5:'
 }
 
 
-function oralistcnx () {
+function oralistcnx {
 ps -eo "args" | grep L[O]CAL=NO | sort | uniq -c
 }
 
 
-function lsnGetservice_OLD () {
+function lsnGetservice_OLD {
 LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | sed 's/.*lsnr \(.*\) -no.*/\1/')
 for LSN_NAME in ${LSN_NAME_LIST}; do
     cmd="lsnrctl status ${LSN_NAME} | grep -m 3 ${1}.*_APPLI"
@@ -615,11 +615,11 @@ done
 }
 
 
-function lsnGetservice () {
+function lsnGetservice {
 FORMER_FUNCNAME=${FUNCNAME}
 #echo "Usage : Connected as 'grid' ${FUNCNAME} <TRI>.*X1"
 ## TODO : sudo -u grid || ssh grid@localhost + oraenv +ASM
-    function Usage() {
+    function Usage {
     echo "Usage : ${FORMER_FUNCNAME} <DB_STRING>.*X1"
     }
 
@@ -659,7 +659,7 @@ FORMER_FUNCNAME=${FUNCNAME}
 }
 
 
-function asmdu() {
+function asmdu {
 # https://blog.pythian.com/amcmd-better-du/
     D=$1
     if [[ -z "$D" ]]; then
@@ -685,7 +685,7 @@ function asmdu() {
 }
 
 
-function ASMvsDB_DIFF(){
+function ASMvsDB_DIFF{
     [[ "${LOGNAME}" != "grid" ]] && echo "You must be connected as grid" && return 1
     DG_DATA=DATAC1
     DG_RECO=RECOC1
@@ -715,21 +715,21 @@ function ASMvsDB_DIFF(){
 }
 
 
-function cr_pfile_from_spfile() {
+function cr_pfile_from_spfile {
 	SPFILE_ASM=$(srvctl config database -d ${DBUNAME} | grep spfile | cut -d' ' -f2)
 	#export ORACLE_HOME=
 	echo -e "create pfile='/tmp/init@.ora' from spfile='${SPFILE_ASM}' ;" | sqlplus -S / as sysdba
 }
 
 
-function set_oracle_wallet(){
+function set_oracle_wallet {
     local REP_WALLET_INFRA
     REP_WALLET_INFRA="${TOOLKIT_DIR:-/prsyslib/toolunix/bin}/ora/wallet_infra"
     export TNS_ADMIN=${1:-$REP_WALLET_INFRA}
     echo "TNS_ADMIN=${TNS_ADMIN}"
 }
 
-function oracle_wallet_infra(){
+function oracle_wallet_infra {
     local REP_WALLET_INFRA
     #hostname | grep prdres &>/dev/null && ENV=PRD
     #hostname | grep intres &>/dev/null && ENV=HPR
@@ -773,7 +773,7 @@ function oracle_wallet_infra(){
 
 # echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} ${WLT_DFT_ARGS} -viewEntry oracle.security.client.default_password | grep =
 
-function oracle_wallet_db(){
+function oracle_wallet_db {
 [ -n "${DBG}" ] && set -x
     local DBUNAME
     local WALLET_PATH=${WALLET_PATH:-.}
@@ -944,7 +944,7 @@ function oracle_wallet_db(){
 alias dbtenv='. <(cat ~/.profile | grep -v PS1)'
 
 
-function oracle_wallet_dbatools(){
+function oracle_wallet_dbatools{
 [ -n "${DBG}" ] && set -x
     local PATH=${PATH}
     local WALLET_PATH
@@ -1192,7 +1192,7 @@ du -sk ${filter} | sort -n | awk '
 '
 }
 
-function ts () {
+function ts {
 [ -n "$1" ] && filter="$*" || filter="*"
 du -sk ${filter} | sort -n | awk '
     BEGIN {
@@ -1231,15 +1231,15 @@ du -sk ${filter} | sort -n | awk '
 
 alias nbfilebyday="stat -c "%y" * |cut -d' ' -f1|sort|uniq -c"
 alias nbhfilebyday="stat -c "%y" * .*|cut -d' ' -f1|sort|uniq -c|tr -d "-""
-function sizebyDay () { ls -l --time-style=long-iso * | awk '{sum[$6] += $5/1048576;} END { for (date in sum) {printf "%s MB %d\n", date, sum[date];} }' | sort -k1 | column -t ; }
-function sizebyDay2 () { ls -l --time-style=long-iso * | WHINY_USERS=-9 awk 'END { for (date in sum) printf "%s\t MB %-15d\n", date, sum[date];} { sum[$6] += $5/1048576;}' ; }
+function sizebyDay { ls -l --time-style=long-iso * | awk '{sum[$6] += $5/1048576;} END { for (date in sum) {printf "%s MB %d\n", date, sum[date];} }' | sort -k1 | column -t ; }
+function sizebyDay2 { ls -l --time-style=long-iso * | WHINY_USERS=-9 awk 'END { for (date in sum) printf "%s\t MB %-15d\n", date, sum[date];} { sum[$6] += $5/1048576;}' ; }
 
 ## Only files, from current directory only, sorted by date and summed
-function sizebyDayf () { find ./ -maxdepth 1 -type f -printf '%TY-%Tm-%Td %s\n' | awk '{sum[$1] += $2/1048576;} END { for (date in sum){printf "%-15s MB %d\n", date, sum[date];} }' | sort ; }
+function sizebyDayf { find ./ -maxdepth 1 -type f -printf '%TY-%Tm-%Td %s\n' | awk '{sum[$1] += $2/1048576;} END { for (date in sum){printf "%-15s MB %d\n", date, sum[date];} }' | sort ; }
 
 ## Only files, recursively, sorted by date and summed
-function sizebyDayfr () { find ./ -type f -printf '%TY-%Tm-%Td %s\n' | awk '{sum[$1] += $2/1048576; total += $2/1048576} END { for (date in sum){printf "%-15s MB %d\n", date, sum[date];} printf "Total MB %d\n", total; }' | sort ; }
-function sizebyMonthfr () { find ./ -type f -printf '%TY-%Tm %s\n' | awk '{sum[$1] += $2/1048576; total += $2/1048576} END { for (date in sum){printf "%-15s MB %d\n", date, sum[date];} printf "Total MB %d\n", total; }' | sort ; }
+function sizebyDayfr { find ./ -type f -printf '%TY-%Tm-%Td %s\n' | awk '{sum[$1] += $2/1048576; total += $2/1048576} END { for (date in sum){printf "%-15s MB %d\n", date, sum[date];} printf "Total MB %d\n", total; }' | sort ; }
+function sizebyMonthfr { find ./ -type f -printf '%TY-%Tm %s\n' | awk '{sum[$1] += $2/1048576; total += $2/1048576} END { for (date in sum){printf "%-15s MB %d\n", date, sum[date];} printf "Total MB %d\n", total; }' | sort ; }
 
 #time find -type f -ctime +90 | xargs -ifile du file | cut -d'/' -f1,2 | awk '{sum[$2] += $1/1024; total += $1/1048576} END { for (dir in sum){printf "%-30s MB %d\n", dir, sum[dir];} printf "Total MB %d\n", total; }' | sort -nk3
 
@@ -1275,7 +1275,7 @@ locf () {
 }
 
 
-function MemRpt () {
+function MemRpt {
 
 ## https://www.kernel.org/doc/Documentation/vm/hugetlbpage.txt
 ## HugePages_Total is the size of the pool of huge pages.
@@ -1405,7 +1405,7 @@ function MemRpt () {
 }
 
 
-function hugepages_calculator() {
+function hugepages_calculator {
 #!/bin/bash
 #
 # hugepages_setting.sh
@@ -1443,7 +1443,7 @@ echo "Current HugePages Allocated : 2K hugepages = " $(cat /proc/sys/vm/nr_hugep
 }
 
 
-function pshugepage () {
+function pshugepage  {
   HUGEPAGECOUNT=0
   for num in $(grep 'anon_hugepage.*dirty=' /proc/$@/numa_maps | awk '{print $6}' | sed 's/dirty=//') ; do
     HUGEPAGECOUNT=$((HUGEPAGECOUNT+num))
@@ -1455,7 +1455,7 @@ function pshugepage () {
 }
 
 
-function EXA_TEST_FLUX() {
+function EXA_TEST_FLUX {
     EXA_CNVG_HPR="..." ; ENDPOINT_PORT=10198
     EXA_CNVG_BCH="..." ; ENDPOINT_PORT=10198
     EXA_CNVG_PRD="..." ; ENDPOINT_PORT=10098
@@ -1616,17 +1616,17 @@ BCT_PRINT=LEFT
 
 if date +'%N' | grep -qv 'N'; then
   BCTTime="date '+%s%N'"
-  function BCTPrintTime() {
+  function BCTPrintTime {
     date --date="@$1" +"$BCT_TIME_FORMAT"
   }
 elif hash gdate 2>/dev/null && gdate +'%N' | grep -qv 'N'; then
   BCTTime="gdate '+%s%N'"
-  function BCTPrintTime() {
+  function BCTPrintTime {
     gdate --date="@$1" +"$BCT_TIME_FORMAT"
   }
 elif hash perl 2>/dev/null; then
   BCTTime="perl -MTime::HiRes -e 'printf(\"%d\",Time::HiRes::time()*1000000000)'"
-  function BCTPrintTime() {
+  function BCTPrintTime {
     date -r "$1" +"$BCT_TIME_FORMAT"
   }
 else
@@ -1635,7 +1635,7 @@ else
 fi
 
 BCT_AT_PROMPT=1
-function BCTPreCommand() {
+function BCTPreCommand {
   local EXIT="$?"
   if [ $EXIT == 0 ]
   then
@@ -1659,7 +1659,7 @@ export COLUMNS
 # Flag to prevent printing out the time upon first login.
 BCT_FIRST_PROMPT=1
 # This is executed before printing out the prompt.
-function BCTPostCommand() {
+function BCTPostCommand {
   BCT_AT_PROMPT=1
 
   if [ -n "$BCT_FIRST_PROMPT" ]; then
@@ -1773,13 +1773,13 @@ ${PS1_CURRENT}"
 ## END - Print a clock
 
 
-function sudo_function () {
+function sudo_function {
 export -f $1
 su $2 -c "bash -c $1"
 }
 
 
-function highlight() {
+function highlight {
     declare -A fg_color_map
     fg_color_map[black]=30
     fg_color_map[red]=31
@@ -1806,7 +1806,7 @@ alias listdbprmy='dbinfo | grep Open | grep $(hostname -s) | cut -d'.' -f2 | tr 
 #### FG : TODO ####
 
 ### FUNCTIONS : TODO
-function SQL_PROCESS() {
+function SQL_PROCESS {
 echo $1
 SQL=$(cat <<-EOF
 echo -e $1
@@ -1816,7 +1816,7 @@ echo SQL=$SQL
 }
 
 
-function SendMail() {
+function SendMail {
 	STATUS=$1
 	COMMENT=$2
 	hostname | grep prdres && ENV=PRD
@@ -1866,7 +1866,7 @@ Content-Type: text/html; charset="us-ascii"
 ## PROMPT BEFORE and AFTER a command
 # https://jichu4n.com/posts/debug-trap-and-prompt_command-in-bash/
 # This will run before any command is executed.
-function PreCommand() {
+function PreCommand {
   if [ -z "$AT_PROMPT" ]; then
     return
   fi
@@ -1881,7 +1881,7 @@ function PreCommand() {
 # want it PostCommand to execute when first starting a bash session (i.e., at
 # the first prompt).
 FIRST_PROMPT=1
-function PostCommand() {
+function PostCommand {
   AT_PROMPT=1
 
   if [ -n "$FIRST_PROMPT" ]; then

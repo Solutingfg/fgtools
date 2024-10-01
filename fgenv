@@ -120,14 +120,35 @@ fi
 # Blanc       0;37  # Blanc clair  1;37
 
 
-#case ${USER} in
-#    root)
-#        export PS1='\[\033[01;31m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
-#        ;;
-#    oracle)
-#        export PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
-#        ;;
-#esac
+case ${USER} in
+    root)
+        USR_COLOR='31'
+        SRV_COLOR='31'
+        SRV_NUM_COLOR='36'
+        PATH_COLOR='37'
+        OSID_COLOR='31'
+        OVER_COLOR='33'
+        SH_MARK_COLOR='31'
+        ;;
+    oracle)
+        USR_COLOR='32'
+        SRV_COLOR='34'
+        SRV_NUM_COLOR='36'
+        PATH_COLOR='37'
+        OSID_COLOR='31'
+        OVER_COLOR='33'
+        SH_MARK_COLOR='32'
+        ;;
+    *)
+        USR_COLOR='35'
+        SRV_COLOR='34'
+        SRV_NUM_COLOR='36'
+        PATH_COLOR='37'
+        OSID_COLOR='31'
+        OVER_COLOR='33'
+        SH_MARK_COLOR='32'
+        ;;
+esac
 
 #export PS1='\[\e[1;31m\]\u\[\e[0;0m\]@\[\e[1;34m\]\h\[\e[0;0m\]:\w\$ '
 ## FGR 2023-09 : To test# export PS1="\[\e[32m\]\$(printf %s%s\ %-\$((\$(tput cols)-12))s '## ' \$(date '+%d/%m/%y %H:%M:%S'))\[\e[0m\]\n\[\e[0;96m\]\u\[\e[0m\]@\[\e[0;93m\]\h:\[\e[0m\]\[\e[0;92m\]\W\[\e[0m\]# "
@@ -173,12 +194,16 @@ esac
 
 case ${USER} in
     root)
+        #export PS1='\[\033[01;31m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\# '
         #export PS1='\e[1;31m\u\e[0m@\e[1;31m\h\e[0m:\e[1;37m\w\e[0m \e[1;31m$ORACLE_SID $SCREEN_FLAG\e[0m\n[$(date "+%a %m/%d %H:%M:%S")]\e[1;31m\$\e[0m\[ '
-        #export PS1='\[\e[1;31${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;31${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${ORA_VERSION})\[\e[0m\]\[\e[1;36m\]${SCREEN_FLAG}${SCL_FLAG}\[\e[0m\]\n[$(date "+%a %m/%d %H:%M:%S")]\[\e[1;31m\]\$\[\e[0m\] '
-        export PS1='\[\e[1;31${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;31${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${ORA_VERSION})\[\e[0m\]${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\[\e[1;31m\]\$\[\e[0m\] '
+        #export PS1='\[\e[1;31${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;31${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${ORA_VERSION})\[\e[0m\]${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\[\e[1;31m\]\$\[\e[0m\] '
+        export PS1='\[\e[1;${USR_COLOR}${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;${SRV_COLOR}${HL_COLOR2}m\]${HN_BASE}\[\e[0m\]\[\e[1;${SRV_NUM_COLOR}${HL_COLOR2}m\]${HN_NUM}\[\e[0m\]:\[\e[1;${PATH_COLOR}m\]\w\[\e[0m\] \[\e[1;${OSID_COLOR}m\]${ORACLE_SID} \[\e[1;${OVER_COLOR}m\]$(eval echo ${ORA_VERSION})\[\e[0m\]${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\[\e[1;${SH_MARK_COLOR}m\]\$\[\e[0m\] '
         ;;
     oracle)
-        export PS1='\[\e[1;32${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${ORA_VERSION})\[\e[0m\]${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\[\e[1;32m\]\$\[\e[0m\] '
+        #export PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
+        #export PS1='\[\e[1;32${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${ORA_VERSION})\[\e[0m\]${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\[\e[1;32m\]\$\[\e[0m\] '
+        #export PS1='\[\e[1;32${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]${HN_BASE}\[\e[0m\]\[\e[1;36${HL_COLOR2}m\]${HN_NUM}\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${ORA_VERSION})\[\e[0m\]${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\[\e[1;32m\]\$\[\e[0m\] '
+        export PS1='\[\e[1;${USR_COLOR}${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;${SRV_COLOR}${HL_COLOR2}m\]${HN_BASE}\[\e[0m\]\[\e[1;${SRV_NUM_COLOR}${HL_COLOR2}m\]${HN_NUM}\[\e[0m\]:\[\e[1;${PATH_COLOR}m\]\w\[\e[0m\] \[\e[1;${OSID_COLOR}m\]${ORACLE_SID} \[\e[1;${OVER_COLOR}m\]$(eval echo ${ORA_VERSION})\[\e[0m\]${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\[\e[1;${SH_MARK_COLOR}m\]\$\[\e[0m\] '
         ;;
     grid)
         export PS1='\[\e[1;33${HL_COLOR}m\]\u\[\e[0m\]@\[\e[1;34${HL_COLOR2}m\]\h\[\e[0m\]:\[\e[1;37m\]\w\[\e[0m\] \[\e[1;31m\]${ORACLE_SID} \[\e[1;33m\]$(eval echo ${GRID_VERSION})\[\e[0m\]${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\[\e[1;32m\]\$\[\e[0m\] '
@@ -787,7 +812,8 @@ function oracle_wallet_db {
         echo "Wallet Found : WALLET_PATH=${WALLET_PATH} => $(pwd)"
     elif [ "${WALLET_PATH}" = "." -a -n "${ORACLE_SID}" ] ; then
         [ -z "${DBUNAME}" ] && DBUNAME=$(srvctl config | grep ${ORACLE_SID:0:8})
-        WALLET_PATH=/apps/oracle/${DBUNAME}/wallet/shared
+        [ -x /apps ] && WALLET_PATH=/apps/oracle/${DBUNAME}/wallet/shared
+        [ -x /srv ] && WALLET_PATH=/srv/oracle/${DBUNAME}/wallet/shared
         echo "Wallet Found : WALLET_PATH=${WALLET_PATH}"
     else
         echo -e '\nWallet is inaccessible or does not exist' 
@@ -944,7 +970,7 @@ function oracle_wallet_db {
 alias dbtenv='. <(cat ~/.profile | grep -v PS1)'
 
 
-function oracle_wallet_dbatools{
+function oracle_wallet_dbatools {
 [ -n "${DBG}" ] && set -x
     local PATH=${PATH}
     local WALLET_PATH
@@ -1492,6 +1518,8 @@ oenv() {
 
     ## FGR : To reload some alias
     fgenv -s
+    ## Remove GRID path if exist to make sure we use the RDBMS path
+    pathremove ${GI_BIN}
 }
 export -f oenv
 

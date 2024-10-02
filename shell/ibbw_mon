@@ -1,0 +1,20 @@
+function ibbw_mon {
+  REFRESH_RATE=${1:-0}
+  while true ; do
+    XMIT_SUM_FIRST=$(find /sys/class/infiniband/mlx*/ -name "*_xmit_data" -exec cat {} \; | awk '{sum+=$1} END {print sum*4}')
+    RCV_SUM_FIRST=$(find /sys/class/infiniband/mlx*/ -name "*_rcv_data" -exec cat {} \; | awk '{sum+=$1} END {print sum*4}')
+    sleep 1
+    XMIT_SUM_LAST=$(find /sys/class/infiniband/mlx*/ -name "*_xmit_data" -exec cat {} \; | awk '{sum+=$1} END {print sum*4}')
+    RCV_SUM_LAST=$(find /sys/class/infiniband/mlx*/ -name "*_rcv_data" -exec cat {} \; | awk '{sum+=$1} END {print sum*4}')
+
+    #echo XMIT_SUM=$XMIT_SUM_FIRST
+    #echo RCV_SUM=$RCV_SUM_FIRST
+    TXRX_SUM_FIRST=$(( $XMIT_SUM_FIRST + $RCV_SUM_FIRST ))
+    TXRX_SUM_LAST=$(( $XMIT_SUM_LAST + $RCV_SUM_LAST ))
+    SUM_SEC=$(( $TXRX_SUM_LAST - $TXRX_SUM_FIRST ))
+    echo "SUM_SEC=$(( $SUM_SEC /1024/1024 )) MB/s"
+    sleep ${REFRESH_RATE}
+  done
+}
+
+ibbw_mon $1

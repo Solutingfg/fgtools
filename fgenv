@@ -37,22 +37,22 @@ function pathremove {
 #WORKDIR="${0%/*}" # Not working when script is not executed but sourced
 #if [ -z "${WORKDIR}" ]
 #then
-#    [ -x "${BPCEIT_PATH}" ] && WORKDIR=${BPCEIT_PATH}
+#    [ -x "${BI_PATH}" ] && WORKDIR=${BI_PATH}
 #else
     [ -h "${BASH_SOURCE}" ] && echo ${BASH_SOURCE} is a link && SOURCED_FILE_PATH=$(readlink ${BASH_SOURCE}) || SOURCED_FILE_PATH=${BASH_SOURCE}
     WORKDIR=$(dirname ${SOURCED_FILE_PATH})
     [ -d "${WORKDIR}/../bin" ] && WORKDIR=$(dirname ${WORKDIR})
-    [ -z "${BPCEIT_PATH}" ] && BPCEIT_PATH=${WORKDIR}
+    [ -z "${BI_PATH}" ] && BI_PATH=${WORKDIR}
 #fi
 
 BINDIR=${WORKDIR}/bin
-EXADATADIR=${WORKDIR}/exadata
-ZDLRADIR=${WORKDIR}/zdlra
+EXADIR=${WORKDIR}/exadata
+ZRADIR=${WORKDIR}/zdlra
 APPLIANCEDIR=${WORKDIR}/appliance
 LIBDIR=${WORKDIR}/lib
 [ $(grep -c "${BINDIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${BINDIR}:.
-[ $(grep -c "${EXADATADIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${EXADATADIR}:.
-[ $(grep -c "${ZDLRADIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${ZDLRADIR}:.
+[ $(grep -c "${EXADIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${EXADIR}:.
+[ $(grep -c "${ZRADIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${ZRADIR}:.
 [ $(grep -c "${APPLIANCEDIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${APPLIANCEDIR}:.
 [ $(grep -c "${LIBDIR}" <<< ${LD_LIBRARY_PATH}) -eq 0 ] && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${LIBDIR}
 [ $(grep -c "${WORKDIR}" <<< ${MANPATH}) -eq 0 ] && export MANPATH="$(manpath -g):${WORKDIR}/usr/share/man"
@@ -70,7 +70,7 @@ if [ $(hostname | grep -E "dbadm|biexa|bizra") ]; then
   PLATFORM=ORACLE_APPLIANCE
   [ $(hostname | grep "mez") ] && WELCOME_MSG="Plateform : ZDLRA" 
   [ $(hostname | grep -E "mex|bfx") ] && WELCOME_MSG="Plateform : EXADATA"
-  [ $(hostname | grep "dbadm") ] && WELCOME_MSG+=" BPCE-IT Legacy (VIOLET)"
+  [ $(hostname | grep "dbadm") ] && WELCOME_MSG+=" BI Legacy (VIOLET)"
   [ $(hostname | grep "biexa") ] && WELCOME_MSG="Plateform : EXADATA Converged (CNVG)"
   [ $(hostname | grep "bizra") ] && WELCOME_MSG="Plateform : ZDLRA Converged (CNVG)"
   alias fgenv &>/dev/null || alias fgenv=". ${LIBDIR}/fgenv"
@@ -176,7 +176,7 @@ case $(hostname --fqdn | cut -d'.' -f2- | tr '[:upper:]' '[:lower:]') in
 esac
 
 
-## BPCE-IT Specific
+## BI Specific
 
 
 ## Screen flag
@@ -268,7 +268,7 @@ then
     # FG : alias cdoh='cd \${ORACLE_HOME}' # -bash: cd: ${ORACLE_HOME}: No such file or directory
     alias cdoh='cd ${ORACLE_HOME}'
     alias lslsn='ps -ef | grep l[s]n'
-    [ -f "${ORACLE_HOME}/suptools/oratop/oratop" ] && ORATOP_PATH=${ORACLE_HOME}/suptools/oratop || ORATOP_PATH=${BPCEIT_PATH}/bin
+    [ -f "${ORACLE_HOME}/suptools/oratop/oratop" ] && ORATOP_PATH=${ORACLE_HOME}/suptools/oratop || ORATOP_PATH=${BI_PATH}/bin
     alias oratop="${ORATOP_PATH}/oratop -f -r / as sysdba"
     alias alrt="echo /u01/app/oracle/diag/rdbms/$(echo ${ORACLE_SID:0:8}D* | tr '[:upper:]' '[:lower:]')/${ORACLE_SID}/trace/alert_${ORACLE_SID}.log"
     alias alrttail="tail -100f /u01/app/oracle/diag/rdbms/$(echo ${ORACLE_SID:0:8}D* | tr '[:upper:]' '[:lower:]')/${ORACLE_SID}/trace/alert_${ORACLE_SID}.log"
@@ -677,7 +677,7 @@ FORMER_FUNCNAME=${FUNCNAME}
         #export -f MainFunc
         #su grid -c "bash -c HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv>/dev/null; MainFunc $1"
         #su grid -c "bash -c echo "HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv; echo ${ORACLE_SID}:${ORACLE_HOME}; MainFunc $1""
-        sudo -i -u grid bash -c ". ${BPCEIT_PATH}/lib/fgenv &>/dev/null; export PATH=\$PATH:/usr/local/bin/; HOST=\$(hostname -s); export ORACLE_SID=+ASM\${HOST:0,-1}; export ORAENV_ASK=NO; . oraenv>/dev/null; lsnGetservice $1"
+        sudo -i -u grid bash -c ". ${BI_PATH}/lib/fgenv &>/dev/null; export PATH=\$PATH:/usr/local/bin/; HOST=\$(hostname -s); export ORACLE_SID=+ASM\${HOST:0,-1}; export ORAENV_ASK=NO; . oraenv>/dev/null; lsnGetservice $1"
         #sudo -u grid bash -c "MainFunc $1"
         #su grid -c "bash -c MainFunc $1"
     fi
@@ -1118,7 +1118,7 @@ alias nmon14g=${BINDIR}/nmon14g_x86_rhel7
 #script /dev/null => bash -c '\''script /dev/null -q -c
 
 ## FGR 2022-02-04 : Force the use of the custom screen in case other screen rpm is installed
-alias screen='${BPCEIT_PATH}/bin/screen -h 50000'
+alias screen='${BI_PATH}/bin/screen -h 50000'
 #alias screen='screen -h 50000'
 alias sc='screen -h 50000'
 alias scls='screen -ls'
@@ -1852,8 +1852,7 @@ function SendMail {
 
 	MAIL_FILE=Report_Mail.msg
 	MAIL_FROM=ANSIBLE_${ENV}_$(hostname -s)
-	#[ "${ENV}" == "HPR" ] && MAIL_TO=Frederic.GROUSSELLE.prestataire@bpce-it.fr || MAIL_TO=DIC_BDD_ORE@bpce-it.fr
-	[ "${ENV}" == "HPR" ] && MAIL_TO=Frederic.GROUSSELLE.prestataire@bpce-it.fr || MAIL_TO=Frederic.GROUSSELLE.prestataire@bpce-it.fr
+	[ "${ENV}" == "HPR" ] && MAIL_TO=<my_email> || MAIL_TO=<goup_email>
 	MAIL_SUBJECT="[ANSIBLE][${ENV}] Deploiement des scripts du GIT en environnement \"${ENV}\""
 	#LOG_CONTENTS_FILE=$( awk 'BEGIN{print "<div>"} {print "<br>";for(i=1;i<=NF;i++)print $i;} END{print "</div>"}' < <(tail -10 ~/${LOG_FILE}) )
 	#LOG_CONTENTS_FILE=$( while read line; do BLINE="<b>$(cut -d: -f1<<<${line}) :</b>"; ELINE="$(cut -d: -f2-<<<${line})";  echo "<br>${BLINE}${ELINE}"; done < <(tail -10 ~/${LOG_FILE}) )
@@ -1975,16 +1974,16 @@ crsctl status res -w "TYPE = ora.service.type" -t | grep 'ONLINE  ONLINE' | sed 
 
 
 ## IS CRS Autostart Enable or Disable
-root@mexi02dbadm01:~
+root@exa01:~
 # dcli -l root -g ~/dbs_group 'ls -d /etc/oracle/scls_scr/* ; cat /etc/oracle/scls_scr/*/root/ohasdstr'
-mexi02dbadm01: /etc/oracle/scls_scr/mexi02dbadm01
-mexi02dbadm01: enable
-mexi02dbadm02: /etc/oracle/scls_scr/mexi02dbadm02
-mexi02dbadm02: enable
-mexi02dbadm03: /etc/oracle/scls_scr/mexi02dbadm03
-mexi02dbadm03: enable
-mexi02dbadm04: /etc/oracle/scls_scr/mexi02dbadm04
-mexi02dbadm04: enable
+exa01: /etc/oracle/scls_scr/exa01
+exa01: enable
+exa02: /etc/oracle/scls_scr/exa02
+exa02: enable
+exa03: /etc/oracle/scls_scr/exa03
+exa03: enable
+exa04: /etc/oracle/scls_scr/exa04
+exa04: enable
 
 #### List item per Oracle version / Architecture / Process
 ### Instances number

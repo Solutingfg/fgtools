@@ -1,7 +1,10 @@
-set pages 1000 lines 200
+set timing off
+
+prompt #### RMAN Backup ####
+set pages 1000 lines 230
 col INPUT format a10
 col OUTPUT format a10
-col TYPE format a12
+col TYPE format a20
 col STATUS format a30
 col Temps(heures) format 999.99
 
@@ -15,6 +18,29 @@ OUTPUT_BYTES_DISPLAY OUTPUT
 from V$RMAN_BACKUP_JOB_DETAILS
  where 
  start_time > sysdate-7
- and status in ('COMPLETED')
+-- and status in ('COMPLETED')
  order by session_key;
 
+prompt
+prompt #### RMAN Sessions and Waits ####
+set lines 230
+column sid format 9999
+--column spid format 999999
+column spid format a8
+column client_info format a35
+column event format a36
+column secs format 99999
+SELECT SID, SPID, CLIENT_INFO, event, seconds_in_wait secs, p1, p2, p3
+  FROM V$PROCESS p, V$SESSION s
+  WHERE p.ADDR = s.PADDR
+  and CLIENT_INFO like 'rman channel=%'
+  order by seconds_in_wait desc
+;
+
+
+prompt
+prompt #### RMAN Progress ####
+set feedback off
+alter session set nls_date_format='dd/mm/yy hh24:mi:ss';
+set feedback on
+select SID, START_TIME,TOTALWORK, sofar, round(((sofar/totalwork) * 100),2) "% Completed", sysdate + TIME_REMAINING/3600/24 "ETA" from v$session_longops where totalwork > sofar AND opname NOT LIKE '%aggregate%' AND opname like 'RMAN%';

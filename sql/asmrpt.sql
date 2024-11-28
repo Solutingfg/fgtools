@@ -1,14 +1,22 @@
+--set verify off
 col gname form a10
 col dbname form a10
 col file_type form a16
 
+define db_name=&1
+
 SELECT
-    gname,
-    dbname,
-    file_type,
-    round(SUM(space)/1024/1024) mb,
-    round(SUM(space)/1024/1024/1024) gb,
-    COUNT(*) "#FILES"
+    gname
+    ,dbname
+    ,file_type
+    ,DGTYPE REDUNDANCY
+    ,CASE DGTYPE WHEN 'HIGH' THEN round(SUM(space)/1024/1024/3) WHEN 'NORMAL' THEN round(SUM(space)/1024/1024/2) WHEN 'EXTERN' THEN round(SUM(space)/1024/1024) END used_mb
+    ,CASE DGTYPE WHEN 'HIGH' THEN round(SUM(space)/1024/1024/1024/3) WHEN 'NORMAL' THEN round(SUM(space)/1024/1024/1024/2) WHEN 'EXTERN' THEN round(SUM(space)/1024/1024/1024) END used_gb
+    ,CASE DGTYPE WHEN 'HIGH' THEN round(SUM(space)/1024/1024/1024/1024/2) WHEN 'NORMAL' THEN round(SUM(space)/1024/1024/1024/1024/2) WHEN 'EXTERN' THEN round(SUM(space)/1024/1024/1024/1024) END used_tb
+    ,COUNT(*) "#FILES"
+    ,round(SUM(space)/1024/1024) raw_mb
+    ,round(SUM(space)/1024/1024/1024) raw_gb
+    ,round(SUM(space)/1024/1024/1024/1024) raw_tb
 FROM
     (
         SELECT
@@ -19,6 +27,7 @@ FROM
             aname,
             system_created,
             alias_directory
+            ,dgtype
         FROM
             (
                 SELECT
@@ -30,6 +39,7 @@ FROM
                     level,
                     gname,
                     aname
+                    ,dgtype
                 FROM
                     (
                         SELECT
@@ -41,6 +51,7 @@ FROM
                             a.alias_directory,
                             c.type file_type,
                             c.space
+                            ,b.type dgtype
                         FROM
                             v$asm_alias a,
                             v$asm_diskgroup b,
@@ -67,11 +78,12 @@ FROM
             NOT file_type IS NULL
             and system_created = 'Y' )
 WHERE
-    dbname like '&db_name'
+    dbname like '&&db_name'
 GROUP BY
     gname,
     dbname,
     file_type
+    ,dgtype
 ORDER BY
     gname,
     dbname,

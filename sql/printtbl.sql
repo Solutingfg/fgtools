@@ -1,5 +1,5 @@
 set serveroutput on
-set verify off feedback off
+set verify off feedback off timing off
 
 declare
   l_theCursor integer default dbms_sql.open_cursor;
@@ -35,13 +35,14 @@ BEGIN
     dbms_output.put_line( '-----------------' );
   end loop;
 
-  execute_immediate( 'alter session set nls_date_format=''dd-MON-yy'' ');
-
+  --execute_immediate( 'alter session set nls_date_format=''dd-MON-yy'' ');
+  execute_immediate( 'alter session set nls_date_format=''MON-DD HH24:MI:SS'' ');
   exception
   when others then
-  execute_immediate( 'alter session set nls_date_format=''dd-MON-yy'' ');
+  --execute_immediate( 'alter session set nls_date_format=''dd-MON-yy'' ');
+    execute_immediate( 'alter session set nls_date_format=''MON-DD HH24:MI:SS'' ');
   raise;
 END;
 /
 
-set verify on feedback on
+set verify on feedback on timing on

@@ -90,6 +90,9 @@ FROM
             and system_created = 'Y' )
 WHERE
     dbname like '&&db_name'
+--AND dgname='DATAC1'
+--AND file_type not in ('DATAFILE')
+--AND file_type in ('ARCHIVELOG')
 GROUP BY
     dgname,
     dbname,

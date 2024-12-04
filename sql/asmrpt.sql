@@ -1,12 +1,23 @@
 --set verify off
-col gname form a10
-col dbname form a10
+set lines 250
+set pages 50
+col dgname form a15
+col dbname form a13
 col file_type form a16
+
+break   on report
+compute sum of used_mb on report
+compute sum of used_gb on report
+compute sum of used_tb on report
+compute sum of "#FILES" on report
+compute sum of raw_mb on report
+compute sum of raw_gb on report
+compute sum of raw_tb on report
 
 define db_name=&1
 
 SELECT
-    gname
+    dgname
     ,dbname
     ,file_type
     ,DGTYPE REDUNDANCY
@@ -20,7 +31,7 @@ SELECT
 FROM
     (
         SELECT
-            gname,
+            dgname,
             regexp_substr(full_alias_path, '[[:alnum:]_]*',1,4) dbname,
             file_type,
             space,
@@ -31,19 +42,19 @@ FROM
         FROM
             (
                 SELECT
-                    concat('+'||gname, sys_connect_by_path(aname, '/')) full_alias_path,
+                    concat('+'||dgname, sys_connect_by_path(aname, '/')) full_alias_path,
                     system_created,
                     alias_directory,
                     file_type,
                     space,
                     level,
-                    gname,
+                    dgname,
                     aname
                     ,dgtype
                 FROM
                     (
                         SELECT
-                            b.name            gname,
+                            b.name            dgname,
                             a.parent_index    pindex,
                             a.name            aname,
                             a.reference_index rindex ,
@@ -80,12 +91,13 @@ FROM
 WHERE
     dbname like '&&db_name'
 GROUP BY
-    gname,
+    dgname,
     dbname,
     file_type
     ,dgtype
 ORDER BY
-    gname,
+    used_mb,
+    dgname,
     dbname,
     file_type
 /

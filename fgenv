@@ -20,8 +20,12 @@
 # Set the Default Shell Deconnection Timeout
 [ -n "${TMOUT}" ] && echo -e TMOUT=${TMOUT} unsetting TMOUT; unset TMOUT
 
-## Silent Mode
+## Execution mode of "fgenv"
+# Silent Mode : No output except is Debug is set "${DBG}"
 [ "${1}" == "-s" ] && SILENT=TRUE || unset SILENT
+# Reload Mode : Force the reload of some variable (eg. word_list)
+[ "${1}" == "-r" ] && RELOAD=TRUE || unset RELOAD
+
 
 #### Miscellaneous
 #TIMEFORMAT="Time Elapsed : %3Rs"
@@ -31,6 +35,13 @@
 #HISTSIZE=10000
 #HISTFILESIZE=20000
 
+### KSH Portability
+# teach ksh 93 about local
+case "$KSH_VERSION" in *' 93'*) alias local='typeset -x' ;; esac
+
+### BASH Portability
+# FG : teach BASH to set variable after pipe "|"
+# set +m;shopt -s lastpipe, echo toto titi | read VAR1 VAR2
 
 ## Set the Working Directory
 #WORKDIR="${0%/*}" # Not working when script is not executed but sourced
@@ -330,7 +341,7 @@ if [ "${LOGNAME}" == "oracle" -o "${LOGNAME}" == "grid" ]
 then
     ## FGR : To speedup GI_HOME lookup : use of oratab first then search the path from the process ocssd.bin
     GI_HOME=$(awk -F: '/+ASM/ {print $2}' /etc/oratab)
-    [ -d "${GI_HOME}/bin" ] || GI_HOME=$(dirname $(ps -eo args | grep [o]cssd.bin) | awk '{print substr( $1, 1, length($1)-4)}')
+    [ -n "${GI_HOME}" -a -d "${GI_HOME}/bin" ] || GI_HOME=$(dirname $(ps -eo args | grep [o]cssd.bin) | awk '{print substr( $1, 1, length($1)-4)}')
     #GI_HOME=$(dirname $(ps -eo args | grep [o]cssd.bin) | awk '{print substr( $1, 1, length($1)-4)}')
     #GI_BIN=$(dirname $(ps -eo args | grep [o]cssd.bin | awk '{print $1}' ))
     GI_BIN=${GI_HOME}/bin
@@ -395,12 +406,18 @@ then
     fi
 fi
 
+
+## ORACLE Common Environment
+alias unsetoh='unset ORACLE_HOME; unset ORACLE_SID; unset ORA_VERSION'
 alias setoh='. ${LIBDIR}/setoh.sh'
 alias env11='. ${LIBDIR}/env11.sh'
 alias env12='. ${LIBDIR}/env12.sh'
 [ -n "${ORACLE_HOME}" ] && alias opatch='${ORACLE_HOME}/OPatch/opatch'
 
 
+
+
+#### FUNCTIONS (Oracle)
 function loopdb {
   local DB_FILTER ORAVERFILTER VERBOSE=0 DEBUG SQL_COLLECTION HEADER DEFINED_HEADER OPEN_ONLY TIMING
   SQL_COLLECTION=${1} ; shift 1
@@ -724,8 +741,8 @@ done
 
 
 function lsnGetservice {
-FORMER_FUNCNAME=${FUNCNAME}
-#echo "Usage : Connected as 'grid' ${FUNCNAME} <TRI>.*X1"
+FORMER_FUNCNAME=${FUNCNAME[0]:-$0}
+#echo "Usage : Connected as 'grid' ${FUNCNAME[0]:-$0} <TRI>.*X1"
 ## TODO : sudo -u grid || ssh grid@localhost + oraenv +ASM
     function Usage {
     echo "Usage : ${FORMER_FUNCNAME} <DB_STRING>.*X1"
@@ -760,7 +777,8 @@ FORMER_FUNCNAME=${FUNCNAME}
         #export -f MainFunc
         #su grid -c "bash -c HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv>/dev/null; MainFunc $1"
         #su grid -c "bash -c echo "HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv; echo ${ORACLE_SID}:${ORACLE_HOME}; MainFunc $1""
-        sudo -i -u grid bash -c ". ${BI_PATH}/lib/fgenv &>/dev/null; export PATH=\$PATH:/usr/local/bin/; HOST=\$(hostname -s); export ORACLE_SID=+ASM\${HOST:0,-1}; export ORAENV_ASK=NO; . oraenv>/dev/null; lsnGetservice $1"
+#        sudo -i -u grid bash -c ". ${BI_PATH}/lib/fgenv &>/dev/null; export PATH=\$PATH:/usr/local/bin/; HOST=\$(hostname -s); export ORACLE_SID=+ASM\${HOST:0,-1}; export ORAENV_ASK=NO; . oraenv>/dev/null; lsnGetservice $1"
+        sudo -i -u grid bash -c ". ${BI_PATH}/lib/fgenv 2>\&1 >/dev/null; PATH=\${PATH}:${GI_BIN}; ORACLE_SID=+ASM; export ORACLE_HOME=${GI_BIN%/bin}; lsnGetservice $1"  ## FGR : 2025-01-09 : ORACLE_SID=+ASM is needed even if it is ot used (no need to export)
         #sudo -u grid bash -c "MainFunc $1"
         #su grid -c "bash -c MainFunc $1"
     fi
@@ -1144,29 +1162,48 @@ function oracle_wallet_dbatools {
 
 # RMARCHMON Resource
 function lsarchmon {
-local ORA_SID=${1:-$ORACLE_SID}
-#CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )` &&  ${CSSD_DIR}/crsctl stat res -w "( NAME coi prc. ) AND ( NAME en .arc )"|grep STATE|cut -d ',' -f1,2|sed 's/STATE=/archmon /';
-CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )` &&  ${CSSD_DIR}/crsctl stat res -w "( NAME coi prc.${ORA_SID:0:8} ) AND ( NAME en .arc )"
+  local ORACLE_SID=${1:-$ORACLE_SID}
+  ! $(which --skip-alias crsctl 2>&1 >/dev/null) && { CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )`; pathmunge $CSSD_DIR after; }
+  #crsctl stat res -w "( NAME coi prc. ) AND ( NAME en .arc )"|grep STATE|cut -d ',' -f1,2|sed 's/STATE=/archmon /';
+  crsctl stat res -w "( NAME coi prc.${ORACLE_SID:0:8} ) AND ( NAME en .arc )"
 }
 
 function lsarchmon_not_ONLINE {
-CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )` &&  ${CSSD_DIR}/crsctl stat res -w "( NAME coi prc. ) AND ( NAME en .arc ) AND (STATE != ONLINE)";
+  ! $(which --skip-alias crsctl 2>&1 >/dev/null) && { CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )`; pathmunge $CSSD_DIR after; }
+  crsctl stat res -w "( NAME coi prc. ) AND ( NAME en .arc ) AND (STATE != ONLINE)";
 }
 
 function lsarchmon_sum {
-crsctl stat res -w "(NAME coi arc)" | grep STATE | sort | uniq -c
+  ! $(which --skip-alias crsctl 2>&1 >/dev/null) && { CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )`; pathmunge $CSSD_DIR after; }
+  crsctl stat res -w "(NAME coi arc)" | grep STATE | sort | uniq -c
 }
 
 function lsarchmon_diff {
-sdiff -s <(crsctl stat res -w "(NAME coi arc)" -t | grep 'prc.*arc' | cut -d. -f2) <(crsctl stat res -w "( TYPE = ora.database.type )" | grep NAME | cut -d. -f2 | tr '[a-z]' '[A-Z]')
+  ! $(which --skip-alias crsctl 2>&1 >/dev/null) && { CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )`; pathmunge $CSSD_DIR after; }
+  printf "%s || %s\n" "ARCHMON without DB <=" "=> Database without ARCHMON"
+  sdiff -s -w50 <(crsctl stat res -w "(NAME coi arc)" -t | grep 'prc.*arc' | cut -d. -f2) <(crsctl stat res -w "( TYPE = ora.database.type )" | grep NAME | cut -d. -f2 | tr '[a-z]' '[A-Z]')
 }
+
+function archmon_config_sid {
+  local ORACLE_SID=${1:-$ORACLE_SID}
+  ! $(which --skip-alias crsctl 2>&1 >/dev/null) && { CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )`; pathmunge $CSSD_DIR after; }
+
+  for _NODE in $(crsctl stat res -w "NAME coi ${ORACLE_SID:0:8}" -p | grep "GEN_USR_ORA_INST_NAME@" | sort -u) ; do
+    _CLUSTER_NODE=$(echo ${_NODE} | cut -d"(" -f2 | cut -d")" -f1)
+    _INSTANCE=$(echo ${_NODE} | cut -d"=" -f2)
+    echo "ssh ${_CLUSTER_NODE} /apps/dbatools/prod/install/ora_setup.ksh -I ${_INSTANCE} -A ARCHMON_CONF,ARCHMON_RESS"
+  done
+}
+
 
 ## DBMS.TAB
 function DBMS_TAB_DIFF {
-grep OB /etc/oratab|awk -F: '{printf("%8s %s\n",substr($1,0,8),$2);}'|sort -u >/tmp/temporatab
-grep OB /srv/dbatools/etc/dbms.tab|awk -F: '{printf("%8s %s\n",substr($2,0,8),$3);}'|sort -u >/tmp/tempdbmstab
-diff /tmp/temporatab /tmp/tempdbmstab|grep OB|awk '{print $2}'|sort -u
-rm /tmp/temporatab /tmp/tempdbmstab
+  printf "%-57s <= || => %s\n" "ORATAB" "DBMS.TAB"
+  sdiff -s <(grep -v '#' /etc/oratab|awk -F: '{printf("%8s %s\n",substr($1,0,8),$2);}'|sort -u) <(grep -v '#' /apps/dbatools/etc/dbms.tab|awk -F: '{printf("%8s %s\n",substr($2,0,8),$3);}'|sort -u)
+  #grep OB /etc/oratab|awk -F: '{printf("%8s %s\n",substr($1,0,8),$2);}'|sort -u >/tmp/temporatab
+  #grep OB /srv/dbatools/etc/dbms.tab|awk -F: '{printf("%8s %s\n",substr($2,0,8),$3);}'|sort -u >/tmp/tempdbmstab
+  #diff /tmp/temporatab /tmp/tempdbmstab|grep OB|awk '{print $2}'|sort -u
+  #rm /tmp/temporatab /tmp/tempdbmstab
 }
 
 
@@ -1221,6 +1258,12 @@ alias sc='screen -h 50000'
 alias scls='screen -ls'
 #alias scls='screen -ls | \grep "${1}"'
 alias sclsa='find /var/run/screen/ -type s'
+alias sclsa2='screens=(/var/run/screen/S-*/*); echo "${screens[@]#*S-}"'
+alias sckill='\screen -ls | grep "(Detached)" | cut -d. -f1 | tr --delete "\t" | xargs echo kill -9; echo \screen -wipe'
+alias sckill='find /var/run/screen/ -type s | grep -E "${1:-.}" | sed -E "s:.*/([0-9]+)\..*:\1:g" | tr --delete "\t" | xargs echo kill -9; echo \screen -wipe'
+alias sckill='set +m;shopt -s lastpipe; _sckill(){ find /var/run/screen/ -type s | grep -E "${1:-.}" | sed -E "s:.*S-(.*)/([0-9]+)\..*:\1 \2:g" | read _USER _SCID | xargs echo sudo $_USER \screen ls;}; _sckill ; set -m;shopt -u lastpipe'
+alias sckill='_f(){ find /var/run/screen/ -type s | grep -E "${1:-.}" | sed -E "s:.*/([0-9]+)\..*:\1:g" | xargs echo kill -9; echo \\screen -wipe ; unset -f _f; }; _f'
+#su <user> -c 'screen -wipe'
 alias scs='screen -S'
 alias scr='screen -r'
 alias scx='screen -x'
@@ -1622,7 +1665,7 @@ export -f oenv
 _word_list_instance() {
 ## FGR 2023-11-06 : PGREG is Faster than PS
 #    [ -z "${word_list_instance}" ] && word_list_instance=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-10)
-    [ -z "${word_list_instance}" ] && word_list_instance=$(pgrep -a pmon | grep -v APX | cut -d'_' -f3- | cut -c1-10)
+    [ -z "${word_list_instance}" -o "${RELOAD}" = "TRUE" ] && word_list_instance=$(pgrep -a pmon | grep -v APX | cut -d'_' -f3- | cut -c1-10)
 #    [ -z "${word_list_dbname}" ] && word_list_dbname=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-8)
 #    [ -z "${word_list_dbname}" ] && word_list_dbname=$(pgrep -a pmon | grep -v APX | cut -d'_' -f3- | cut -c1-8)
     word_list_bisudo=$(grep "^[^#|^$|^ *$]" ${SCRIPT_DIR}/ora/env/init.allow 2>/dev/null | cut -d' ' -f2 | uniq)
@@ -1929,6 +1972,22 @@ alias listdbprmy='dbinfo | grep Open | grep $(hostname -s) | cut -d'.' -f2 | tr 
 #### FG : TODO ####
 
 ### FUNCTIONS : TODO
+function ORA_CNX_TEST {
+## Check Instances connection
+# All instances
+pgrep -af _pmon_ | grep -v '+A' | sort -k2 | awk -F'_' '{ print $NF }' | \
+ xargs -P10 -Idbsid sh -c '. oraenv<<<dbsid &>/dev/null ; echo "${ORACLE_SID} $(printf "%-18s" `echo "${ORACLE_HOME}" | sed -E "s:.*/([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*).*:\(\1.\2.\3.\4.\5\):"`;) `TEST_DB_CNX_OUT=$(echo -e "WHENEVER SQLERROR EXIT SQL.SQLCODE;\nconnect / as sysdba" | sqlplus -S -L /nolog) && echo "RC=$? : CNX OK" || echo "RC=$? : CNX KO : $(echo -n ${TEST_DB_CNX_OUT})"`"' | grep --color -Ei '^|CNX KO|ERROR|ORA-.*'
+# xargs -P10 -Idbsid sh -c '. oraenv<<<dbsid &>/dev/null ; printf "%10s %18s => %-6s %s %s %s %s %s %s %s %s %s %s\n" ${ORACLE_SID} `echo "${ORACLE_HOME}" | sed -E "s:.*/([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*).*:\(\1.\2.\3.\4.\5\):"` `TEST_DB_CNX_OUT=$(echo -e "WHENEVER SQLERROR EXIT SQL.SQLCODE;\nconnect / as sysdba" | sqlplus -S -L /nolog) && echo "RC=$? : CNX OK" || echo "RC=$? : CNX KO : $(echo -n ${TEST_DB_CNX_OUT})"`' | grep --color -Ei '^|CNX KO|ERROR|ORA-.*' 
+# xargs -P10 -Idbsid sh -c '. oraenv<<<dbsid &>/dev/null ; echo ${ORACLE_SID} \(`echo "${ORACLE_HOME}" | sed -E "s:.*/([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*).*:\1.\2.\3.\4.\5:"`\) : `echo -e "WHENEVER SQLERROR EXIT SQL.SQLCODE;\nselect * from dual;" | sqlplus -s / as sysdba &>/dev/null; [ "$?" = "0"  ] && echo "RC=$? : CNX OK" || echo "RC=$? : CNX KO"`' | grep --color -Ei '^|CNX KO'
+
+
+# Per version
+#ORA_VER=19.22
+#pgrep -af _pmon_ | grep -v '+A' | sort -k2 | while read pid pname ; do echo ${pname#???_pmon_} $(sudo ls -l /proc/$pid/exe | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//'); done | grep "${ORA_VER:-|NA|}" | awk '{print $1}' | \
+# xargs -P10 -Idbsid sh -c '. oraenv<<<dbsid &>/dev/null ; echo "${ORACLE_SID} $(printf "%-18s" `echo "${ORACLE_HOME}" | sed -E "s:.*/([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*).*:\(\1.\2.\3.\4.\5\):"`;) `TEST_DB_CNX_OUT=$(echo -e "WHENEVER SQLERROR EXIT SQL.SQLCODE;\nconnect / as sysdba" | sqlplus -S -L /nolog) && echo "RC=$? : CNX OK" || echo "RC=$? : CNX KO : $(echo -n ${TEST_DB_CNX_OUT})"`"' | grep --color -Ei '^|CNX KO|ERROR|ORA-.*'
+}
+
+
 function SQL_PROCESS {
 echo $1
 SQL=$(cat <<-EOF

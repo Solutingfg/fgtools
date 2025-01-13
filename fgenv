@@ -177,6 +177,7 @@ esac
 
 
 ## BI Specific
+## ANONYMIZED BI ##
 
 
 ## Screen flag
@@ -229,19 +230,18 @@ esac
 export PS4='$0.$LINENO+ '
 
 ## COLOR
-function display_all_colors_16
-{
-for clbg in {40..47} {100..107} 49 ; do
-    #Foreground
-    for clfg in {30..37} {90..97} 39 ; do
-        #Formatting
-        for attr in 0 1 2 4 5 7 ; do
-            #Print the result
-            echo -en "\e[${attr};${clbg};${clfg}m ^[${attr};${clbg};${clfg}m \e[0m"
-        done
-        echo #Newline
-    done
-done
+function display_all_colors_16 {
+  for clbg in {40..47} {100..107} 49 ; do
+      #Foreground
+      for clfg in {30..37} {90..97} 39 ; do
+          #Formatting
+          for attr in 0 1 2 4 5 7 ; do
+              #Print the result
+              echo -en "\e[${attr};${clbg};${clfg}m ^[${attr};${clbg};${clfg}m \e[0m"
+          done
+          echo #Newline
+      done
+  done
 }
 
 
@@ -255,6 +255,9 @@ then
     #GI_BIN=$(dirname $(ps -eo args | grep [o]cssd.bin | awk '{print $1}' ))
     GI_BIN=${GI_HOME}/bin
     #export PATH=${PATH}:${GI_BIN}
+    #[ "${LOGNAME}" == "grid" ] && pathmunge ${GI_BIN} after || pathremove ${GI_BIN}
+    ## Move GRID path if exist to the end of PATH to make sure we use the RDBMS path
+    pathremove ${GI_BIN}
     pathmunge ${GI_BIN} after
     #.oracle_profile
     #export PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
@@ -318,7 +321,6 @@ alias env12='. ${LIBDIR}/env12.sh'
 
 
 function loopdb {
-#  set +x
   local DB_FILTER ORAVERFILTER VERBOSE=0 DEBUG SQL_COLLECTION HEADER DEFINED_HEADER OPEN_ONLY TIMING
   SQL_COLLECTION=${1} ; shift 1
 
@@ -795,11 +797,8 @@ function oracle_wallet_infra {
     done
 }
 
-
-# echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} ${WLT_DFT_ARGS} -viewEntry oracle.security.client.default_password | grep =
-
 function oracle_wallet_db {
-[ -n "${DBG}" ] && set -x
+[ -n "${DBG}" ] && set -x || set +x
     local DBUNAME
     local WALLET_PATH=${WALLET_PATH:-.}
     local WALLET_PASSWD=${WALLET_PASSWD}
@@ -812,12 +811,10 @@ function oracle_wallet_db {
         echo "Wallet Found : WALLET_PATH=${WALLET_PATH} => $(pwd)"
     elif [ "${WALLET_PATH}" = "." -a -n "${ORACLE_SID}" ] ; then
         [ -z "${DBUNAME}" ] && DBUNAME=$(srvctl config | grep ${ORACLE_SID:0:8})
-        [ -x /apps ] && WALLET_PATH=/apps/oracle/${DBUNAME}/wallet/shared
-        [ -x /srv ] && WALLET_PATH=/srv/oracle/${DBUNAME}/wallet/shared
+        [ -d /apps/oracle/${DBUNAME}/wallet/shared ] && WALLET_PATH=/apps/oracle/${DBUNAME}/wallet/shared
+        [ -d /srv/oracle/${DBUNAME}/wallet/shared ] && WALLET_PATH=/srv/oracle/${DBUNAME}/wallet/shared
+        [ ! -r ${WALLET_PATH}/cwallet.sso ] && { echo -e '\nWallet is inaccessible or does not exist' ; return 1 ;}
         echo "Wallet Found : WALLET_PATH=${WALLET_PATH}"
-    else
-        echo -e '\nWallet is inaccessible or does not exist' 
-        return 1 
     fi
 
     [ "${WALLET_PATH}" = "." ] && local WALLET_PATH_TEST=$(pwd)
@@ -970,6 +967,15 @@ function oracle_wallet_db {
 alias dbtenv='. <(cat ~/.profile | grep -v PS1)'
 
 
+function dbtconf {
+  echo FUNCNAME="${FUNCNAME[0]:-$0}"
+  local ORACLE_SID=${1:-$ORACLE_SID}
+  [ -z "${ORACLE_SID}" ] && { echo "Please set or provide an ORACLE_SID" ; return 1; }
+  echo -e "\e${CWB}DBATools Configuration for Database : \e${CNC}${ORACLE_SID:0:8} ($(eval ls /{apps,srv}/oracle/${ORACLE_SID}/config/${ORACLE_SID}.env 2>/dev/null))" | grep -E "^|${ORACLE_SID:0:8}"
+  cat /{apps,srv}/oracle/${ORACLE_SID}/config/${ORACLE_SID}.env 2>/dev/null | grep -v '^#' | grep -E 'DBID|DBUN=|DBNAME|CATALOG|TYPE_RMAN|TYPE_ARCH_RMAN|SBT_TYPE|PARMS_RMAN|PARALLELISM|COMPRESSION' | sed 's:^export ::'
+}
+
+
 function oracle_wallet_dbatools {
 [ -n "${DBG}" ] && set -x
     local PATH=${PATH}
@@ -1057,12 +1063,21 @@ function oracle_wallet_dbatools {
 
 # RMARCHMON Resource
 function lsarchmon {
-CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )` &&  ${CSSD_DIR}/crsctl stat res -w "( NAME coi prc. ) AND ( NAME en .arc )"|grep STATE|cut -d ',' -f1,2|sed 's/STATE=/archmon /';
-CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )` &&  ${CSSD_DIR}/crsctl stat res -w "( NAME coi prc.${ORACLE_SID:0:8} ) AND ( NAME en .arc )"|grep STATE|cut -d ',' -f1,2|sed 's/STATE=/archmon /';
+local ORA_SID=${1:-$ORACLE_SID}
+#CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )` &&  ${CSSD_DIR}/crsctl stat res -w "( NAME coi prc. ) AND ( NAME en .arc )"|grep STATE|cut -d ',' -f1,2|sed 's/STATE=/archmon /';
+CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )` &&  ${CSSD_DIR}/crsctl stat res -w "( NAME coi prc.${ORA_SID:0:8} ) AND ( NAME en .arc )"
 }
 
 function lsarchmon_not_ONLINE {
 CSSD_DIR=`dirname $( ps -eo args | grep ocssd.bin | grep -v grep | awk '{print $1}' )` &&  ${CSSD_DIR}/crsctl stat res -w "( NAME coi prc. ) AND ( NAME en .arc ) AND (STATE != ONLINE)";
+}
+
+function lsarchmon_sum {
+crsctl stat res -w "(NAME coi arc)" | grep STATE | sort | uniq -c
+}
+
+function lsarchmon_diff {
+sdiff -s <(crsctl stat res -w "(NAME coi arc)" -t | grep 'prc.*arc' | cut -d. -f2) <(crsctl stat res -w "( TYPE = ora.database.type )" | grep NAME | cut -d. -f2 | tr '[a-z]' '[A-Z]')
 }
 
 ## DBMS.TAB
@@ -1102,7 +1117,8 @@ alias psg="ps aux | grep -v grep | grep -i"
 #alias dmesg='dmesg -H'
 alias vim='vim -u ${LIBDIR}/.vimrc'
 alias vi=vim
-[ ! -d '/usr/share/vim/vim74' ] && export VIMRUNTIME=${LIBDIR}/share/vim/vim74
+#[ ! -d '/usr/share/vim/vim74' ] && export VIMRUNTIME=${LIBDIR}/share/vim/vim74
+[ ! $(ls -d /usr/share/vi/vim[0-9]* 2>/dev/null) ] && { [ -z "${SILENT}" ] && echo "NoVIMruntimes : export VIMRUNTIME=${LIBDIR}/share/vim/vim74"; export VIMRUNTIME=${LIBDIR}/share/vim/vim74; }
 alias ssh='ssh -o ServerAliveInterval=30'
 alias netbreakdown="netstat -nat | awk '{print $6}' | sort | uniq -c | sort -n"
 
@@ -1116,22 +1132,23 @@ alias nmon14g=${BINDIR}/nmon14g_x86_rhel7
 ## SCREEN
 # To avoid error : screen Cannot open your terminal '/dev/pts/0' - please check.
 #script /dev/null => bash -c '\''script /dev/null -q -c
-
-## FGR 2022-02-04 : Force the use of the custom screen in case other screen rpm is installed
-alias screen='${BI_PATH}/bin/screen -h 50000'
 #alias screen='screen -h 50000'
+## FGR 2022-02-04 : Force the use of the custom screen in case other screen rpm is installed
+#alias screen='${BPCEIT_PATH}/bin/screen -h 50000'
+if ! $(which --skip-alias screen &>/dev/null); then alias screen='${BPCEIT_PATH}/bin/screen -h 50000' else alias screen='screen -h 50000'; fi
 alias sc='screen -h 50000'
 alias scls='screen -ls'
 #alias scls='screen -ls | \grep "${1}"'
 alias sclsa='find /var/run/screen/ -type s'
-alias scr='screen -r'
 alias scs='screen -S'
+alias scr='screen -r'
+alias scx='screen -x'
 # Command SCRIPT is used as a workaround when not connected as root : "Cannot open your terminal '/dev/pts/0' - please check."
-alias scr='bash -c '\''script /dev/null -q -c "screen -r ${0#bash}"'\'''
-alias scrd='bash -c '\''script /dev/null -q -c "screen -rd ${0#bash}"'\'''
-alias scx='bash -c '\''script /dev/null -q -c "screen -x ${0#bash}"'\'''
-alias scrx='bash -c '\''script /dev/null -q -c "screen -rx ${0#bash}"'\'''
-alias scs='bash -c '\''script /dev/null -q -c "screen -h 50000 -S ${0#bash}"'\'''
+#alias scr='bash -c '\''script /dev/null -q -c "screen -r ${0#bash}"'\'''
+#alias scrd='bash -c '\''script /dev/null -q -c "screen -rd ${0#bash}"'\'''
+#alias scx='bash -c '\''script /dev/null -q -c "screen -x ${0#bash}"'\'''
+#alias scrx='bash -c '\''script /dev/null -q -c "screen -rx ${0#bash}"'\'''
+#alias scs='bash -c '\''script /dev/null -q -c "screen -h 50000 -S ${0#bash}"'\'''
 
 export SCREENRC=${LIBDIR}/.screenrc
 # .screenrc
@@ -1150,17 +1167,6 @@ export SCREENRC=${LIBDIR}/.screenrc
 #screen $SHELL -c 'screen -X caption always "$STY"'
 #caption always "%{= kc}Screen session on %H (system load: %l) %-28=%{= .m} %Y-%m-%d %0c"
 #caption always "%{= kc}Screen session on %H (system load: %l) %-28=%{= .m} %D %d-%m-%Y %0c"
-
-
-## FUNCTIONS
-#du -sk ./* | /usr/bin/sort -n | /usr/bin/awk 'BEGIN{ pref[1]="K"; pref[2]="M"; pref[3]="G";} { total = total + $1; x = $1; y = 1; while( x > 1024 ) { x = (x + 1023)/1024; y++; } printf("%g%s\t%s\n",int(x*10)/10,pref[y],$2); } END { y = 1; while( total > 1024 ) { total = (total + 1023)/1024; y++; } printf("Total: %g%s\n",int(total*10)/10,pref[y]); }'
-#du -sk * | awk '{ total = total + $1 } END { print total }'
-#ls -l | awk '{sum += $5} END {print sum}'
-
-
-function ethlink {
-  for i in 1 2 3 4 ; do echo "=== eth$i === : $(ethtool eth$i 2>&1 | egrep "Speed|Duplex|Link|Auto" | grep -Ev 'Unknown|Operation not permitted' | paste -s -)" ; done
-}
 
 
 ## TMUX
@@ -1184,10 +1190,15 @@ export ANSIBLE_REMOTE_USER=root
 #export ANSIBLE_VAULT_PASSWORD_FILE=~/.vault_pass.txt
 
 
+
+
+#### FUNCTIONS (System)
 ## Builtin Enhancement
 function dufg {
 ARG1=${1:-*}
 du -sk ./${ARG1} | /usr/bin/sort -n | /usr/bin/awk 'BEGIN{ pref[1]="K"; pref[2]="M"; pref[3]="G";} { total = total + $1; x = $1; y = 1; while( x > 1024 ) { x = (x + 1023)/1024; y++; } printf("%g%s\t%s\n",int(x*10)/10,pref[y],$2); } END { y = 1; while( total > 1024 ) { total = (total + 1023)/1024; y++; } printf("Total: %g%s\n",int(total*10)/10,pref[y]); }'
+#du -sk * | awk '{ total = total + $1 } END { print total }'
+#ls -l | awk '{sum += $5} END {print sum}'
 }
 
 
@@ -1324,7 +1335,6 @@ function MemRpt {
 ##                 detailed information, please, refer to
 ##                 /sys/kernel/mm/hugepages (described below).
 ## AnonHugePages entry lists the number of pages that the newer Transparent Huge Page mechanism currently has in use
-
 
     args=$*
     for argv in $* ; do
@@ -1481,10 +1491,16 @@ function pshugepage {
 }
 
 
+function ethlink {
+  for i in 1 2 3 4 ; do echo "=== eth$i === : $(ethtool eth$i 2>&1 | egrep "Speed|Duplex|Link|Auto" | grep -Ev 'Unknown|Operation not permitted' | paste -s -)" ; done
+}
+
+
 function EXA_TEST_FLUX {
-    EXA_CNVG_HPR="..." ; ENDPOINT_PORT=10198
-    EXA_CNVG_BCH="..." ; ENDPOINT_PORT=10198
-    EXA_CNVG_PRD="..." ; ENDPOINT_PORT=10098
+    EXA_CNVG_HPR="## ANONYMIZED BI ##" ; ENDPOINT_PORT=10198
+    EXA_CNVG_BCH="## ANONYMIZED BI ##" ; ENDPOINT_PORT=10198
+    EXA_CNVG_PRD="## ANONYMIZED BI ##" ; ENDPOINT_PORT=10098
+
     for EXA_LIST in $(set | grep EXA_CNVG_ | cut -d= -f1); do 
         echo "${EXA_LIST}=${!EXA_LIST}"
         for endpoint in ${!EXA_LIST}; do echo "${endpoint}:${ENDPOINT_PORT} :" ; nc -vzw1 ${endpoint} ${ENDPOINT_PORT} 2>&1 | grep -v 'Version' ; done
@@ -1518,8 +1534,6 @@ oenv() {
 
     ## FGR : To reload some alias
     fgenv -s
-    ## Remove GRID path if exist to make sure we use the RDBMS path
-    pathremove ${GI_BIN}
 }
 export -f oenv
 
@@ -1943,6 +1957,7 @@ function PostCommand {
 
 
 ### COMMANDS : TODO
+## oralistdbi, oralistdbn, oralistdbu : List all dbX running or from OCR
 ## Search in traces :
 #    grep 'ns main err code: 12599' /u01/app/oracle/diag/rdbms/*/*/trace/alert*.log | sort|uniq -c|sort -n
 #    grep -cH 'ns main err code: 12599' /u01/app/oracle/diag/rdbms/*/*/trace/alert*.log | grep -E '_1|_2|11|12|13' | awk -F: '{print $2" "$1}' | sort -n | awk -F/ '{ print $0" : Is Instance Running: "("ps -ef | grep pm[o]n_"$8 | getline $ps); $ps}'
@@ -1985,6 +2000,15 @@ exa03: enable
 exa04: /etc/oracle/scls_scr/exa04
 exa04: enable
 
+#### Exadata SCAN / VIP / IP metier
+## SCAN 
+# srvctl config scan | grep 'IPv4'
+## VIP
+# srvctl config nodeapps -viponly | grep -E 'IPv4'
+## IP metier
+# dcli -g /root/dbs_group -l root ip -c -4 a | grep -E 'bondeth0\.[0-9]+$'
+
+
 #### List item per Oracle version / Architecture / Process
 ### Instances number
 #Répartition de toutes les instances par nœud :
@@ -2022,11 +2046,11 @@ for i in $(ps -efu oracle | grep -E 'ora_pmon.*[A-Z][0-9]*$' | awk '{ print $2":
 ## Service
 . oraenv<<<crs
 #Répartition par nœud des services APPLI Oracle pour les bases 19c :
-for dbuname in $(crsctl status res -w " ( TYPE = ora.database.type ) && ( ORACLE_HOME coi 19.1 )" -p -attr NAME | sed -e '/^$/d' -e 's/^NAME=ora.\(.*\).db/\1 /'); do crsctl stat res ora.${dbuname}.${dbuname:0:8}_appli.svc | awk -v dbu=${dbuname} -v svc=${dbuname:0:8}_appli.svc -F= '/^STATE=/ { print dbu" "svc" "$2" "$3}'; done | awk '{ if ( $0 ~ /dbadm01/ ) { first++ } if ( $0 ~ /dbadm02/ ) { second++ } if ( $0 ~ /dbadm03/ ) { third++ } if ( $0 ~ /dbadm04/ ) { fourth++ } } END { print "mexi02dbadm01: "first "\nmexi02dbadm02: "second "\nmexi02dbadm03: "third "\nmexi02dbadm04: "fourth }'
+for dbuname in $(crsctl status res -w "( TYPE = ora.database.type ) && ( ORACLE_HOME coi 19. )" -p -attr NAME | sed -e '/^$/d' -e 's/^NAME=ora.\(.*\).db/\1 /'); do crsctl stat res ora.${dbuname}.${dbuname:0:8}_appli.svc | awk -v dbu=${dbuname} -v svc=${dbuname:0:8}_appli.svc -F= '/^STATE=/ { print dbu" "svc" "$2" "$3}'; done | awk '{ if ( $0 ~ /dbadm01/ ) { first++ } if ( $0 ~ /dbadm02/ ) { second++ } if ( $0 ~ /dbadm03/ ) { third++ } if ( $0 ~ /dbadm04/ ) { fourth++ } } END { print "mexi02dbadm01: "first "\nmexi02dbadm02: "second "\nmexi02dbadm03: "third "\nmexi02dbadm04: "fourth }'
 #Etat des lieux groupé des services APPLI Oracle pour les bases 19c 
 for dbuname in $(crsctl status res -w "(TYPE = ora.database.type) && (ORACLE_HOME coi 19.1)" -p -attr NAME | sed -e '/^$/d' -e 's/^NAME=ora.\(.*\).db/\1 /'); do eval "crsctl stat res ora.${dbuname}.${dbuname:0:8}_appli.svc | awk -v dbu=${dbuname} -v svc=${dbuname:0:8}_appli.svc -F= '/^STATE=/ { print dbu\" \"svc\" \"\$2\" \"\$3}'"; done | cut -d' ' -f3- | sort | uniq -c
 #Etat des lieux détaillé des services APPLI Oracle pour les bases 19c :
-for dbuname in $(crsctl status res -w " ( TYPE = ora.database.type ) && ( ORACLE_HOME coi 19.1 )" -p -attr NAME | sed -e '/^$/d' -e 's/^NAME=ora.\(.*\).db/\1 /'); do eval "crsctl stat res ora.${dbuname}.${dbuname:0:8}_appli.svc | awk -v dbu=${dbuname} -v svc=${dbuname:0:8}_appli.svc -F= '/^STATE=/ { print dbu\" \"svc\" \"\$2\" \"\$3}'"; done;
+for dbuname in $(crsctl status res -w "( TYPE = ora.database.type ) && ( ORACLE_HOME coi 19.1 )" -p -attr NAME | sed -e '/^$/d' -e 's/^NAME=ora.\(.*\).db/\1 /'); do eval "crsctl stat res ora.${dbuname}.${dbuname:0:8}_appli.svc | awk -v dbu=${dbuname} -v svc=${dbuname:0:8}_appli.svc -F= '/^STATE=/ { print dbu\" \"svc\" \"\$2\" \"\$3}'"; done;
 
 
 #### END : TODO #####

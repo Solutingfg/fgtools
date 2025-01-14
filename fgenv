@@ -17,8 +17,9 @@
 # ------------------------------------------------------------------------------
 
 ## WORKAROUND TO DEFAULT ENV
-# Set the Default Shell Deconnection Timeout
+# Unset the Default Shell disconnection Timeout
 [ -n "${TMOUT}" ] && echo -e TMOUT=${TMOUT} unsetting TMOUT; unset TMOUT
+
 
 ## Execution mode of "fgenv"
 # Silent Mode : No output except is Debug is set "${DBG}"
@@ -30,18 +31,22 @@
 #### Miscellaneous
 #TIMEFORMAT="Time Elapsed : %3Rs"
 
+
 ### History control
 #HISTFILE
 #HISTSIZE=10000
 #HISTFILESIZE=20000
 
+
 ### KSH Portability
 # teach ksh 93 about local
 case "$KSH_VERSION" in *' 93'*) alias local='typeset -x' ;; esac
 
+
 ### BASH Portability
 # FG : teach BASH to set variable after pipe "|"
 # set +m;shopt -s lastpipe, echo toto titi | read VAR1 VAR2
+
 
 ## Set the Working Directory
 #WORKDIR="${0%/*}" # Not working when script is not executed but sourced
@@ -53,18 +58,21 @@ case "$KSH_VERSION" in *' 93'*) alias local='typeset -x' ;; esac
   [ -z "${BI_PATH}" ] && BI_PATH=${WORKDIR}
 #fi
 
+
 ## Set Environment Path for scripts collection
 BINDIR=${WORKDIR}/bin
 EXADIR=${WORKDIR}/exadata
 ZRADIR=${WORKDIR}/zdlra
 APPLIANCEDIR=${WORKDIR}/appliance
 LIBDIR=${WORKDIR}/lib
-[ $(grep -c "${BINDIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${BINDIR}:.
-[ $(grep -c "${EXADIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${EXADIR}:.
-[ $(grep -c "${ZRADIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${ZRADIR}:.
-[ $(grep -c "${APPLIANCEDIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${APPLIANCEDIR}:.
+[ $(grep -c "${BINDIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${BINDIR}
+[ $(grep -c "${EXADIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${EXADIR}
+[ $(grep -c "${ZRADIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${ZRADIR}
+[ $(grep -c "${APPLIANCEDIR}" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:${APPLIANCEDIR}
+[ $(grep -cE ':?\.:?' <<< ${PATH}) -eq 0 ] && export PATH=$PATH:.
 [ $(grep -c "${LIBDIR}" <<< ${LD_LIBRARY_PATH}) -eq 0 ] && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${LIBDIR}
 [ $(grep -c "${WORKDIR}" <<< ${MANPATH}) -eq 0 ] && export MANPATH="$(manpath -g):${WORKDIR}/usr/share/man"
+
 
 ## Set the BI Toolkit Path
 # FGR : Managed by prsyslib.sh #[ ! -d "/prsyslib" ] && [ $(grep -c "/oracle/scripts" <<< ${PATH}) -eq 0 ] && export PATH=$PATH:/oracle/scripts:/oracle/exploit
@@ -100,7 +108,7 @@ if [ $(hostname | grep -E "dbadm|biexa|bizra") ]; then
   [ $(hostname | grep "dbadm") ]          && WELCOME_MSG+=" BI Legacy (BI VIOLET)"
   [ $(hostname | grep "biexa") ]          && WELCOME_MSG="Plateform : EXADATA Converged (CNVG)" && PLATFORM_TYPE=EXA_CNVG
   [ $(hostname | grep "bizra") ]          && WELCOME_MSG="Plateform : ZDLRA Converged (CNVG)"   && PLATFORM_TYPE=ZDLRA_CNVG
-  [ $(hostname | grep -E "ora[0-9]{4}") ] && WELCOME_MSG="Plateform : EXADATA (NX)"               && PLATFORM_TYPE=EXA_NX
+  [ $(hostname | grep -E "ora[0-9]{4}") ] && WELCOME_MSG="Plateform : EXADATA (NX)"             && PLATFORM_TYPE=EXA_NX
   alias fgenv &>/dev/null || alias fgenv=". ${LIBDIR}/fgenv"
   HN=$(hostname -s)
   HN_BASE=${HN%?}
@@ -217,7 +225,11 @@ fi
 
 
 ## Oracle Version
-GI_HOME=$(grep ^+ASM /etc/oratab | cut -d: -f2)
+#GI_HOME=$(grep ^+ASM /etc/oratab | cut -d: -f2)  ## FGR TOFIX : 2025-01-10 : oratab is deprecated, retrieve GI_HOME from process ocssd.bin
+## FGR : To speedup GI_HOME lookup : use of oratab first then search the path from the process ocssd.bin
+[ -z "${GI_HOME}" ] && { GI_HOME=$(awk -F: '/^+ASM/ {print $2}' /etc/oratab); [ -n "$DBG" ] && echo "Set GI_HOME from oratab : GI_HOME=${GI_HOME}" ;}
+[ -n "${GI_HOME}" -a -x "${GI_HOME}/bin/oracle" ] || { GI_HOME=$(dirname $(ps -eo args | grep [o]cssd.bin) | awk '{print substr( $1, 1, length($1)-4)}'); [ -n "$DBG" ] && echo "Set GI_HOME from process : GI_HOME=${GI_HOME}" ;}
+
 [ "${ORACLE_HOME}" = "${GI_HOME}" ] && { OH_TYPE='(GI)' ; OH_TYPE_COLOR=${CRB} ;} || { OH_TYPE='(DB)' ; OH_TYPE_COLOR=${CCB} ;}
 #[ "${PLATFORM}" == "ORACLE_APPLIANCE" ] && ORA_VERSION='$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER")' && GRID_VERSION='$(ORAVER=${ORACLE_HOME##*/u01/app/};ORAVER=${ORAVER%/*};echo "$ORAVER")'
 #[ "${PLATFORM}" == "ORACLE_APPLIANCE" ] && ORA_VERSION='$(ORAVER=${ORACLE_HOME##*/product/};ORAVER=${ORAVER%/*};echo "$ORAVER")' && GRID_VERSION='$(ORAVER=${ORACLE_HOME##*/u01/app/};echo "$ORAVER")'
@@ -686,15 +698,15 @@ function ExecPrint_Result {
 }
 
 if [ ! -z "${LOOP_TIMER}" ]; then
-    #echo "Press [CTRL+C] to stop the loop ..."
-    echo "${SGA_DBF_USAGE_HEADER}"
-    while : 
-    do
-        ExecPrint_Result
-        sleep ${LOOP_TIMER}
-    done
-else
+  #echo "Press [CTRL+C] to stop the loop ..."
+  echo "${SGA_DBF_USAGE_HEADER}"
+  while : 
+  do
     ExecPrint_Result
+    sleep ${LOOP_TIMER}
+  done
+else
+  ExecPrint_Result
 fi
 
 
@@ -703,14 +715,14 @@ fi
 
 
 function oralisthome {
-local FILTER
-[ ! -z "${1}" ] && FILTER="| grep ${1}"
-#printf "%6s %-20s %-80s\n" "PID" "NAME" "ORACLE_HOME"
-printf "%6s %-10s %-80s\n" "PID" "NAME" "ORACLE_HOME"
-eval "pgrep -af _pmon_ ${FILTER} | sort -k2,2" |
-  while read pid pname ; do
-    printf "%6s %-10s %-80s\n" $pid ${pname#???_pmon_} $(sudo ls -l /proc/$pid/exe | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//' | sort | uniq)
-  done
+  local FILTER
+  [ ! -z "${1}" ] && FILTER="| grep ${1}"
+  #printf "%6s %-20s %-80s\n" "PID" "NAME" "ORACLE_HOME"
+  printf "%6s %-10s %-80s\n" "PID" "NAME" "ORACLE_HOME"
+  eval "pgrep -af _pmon_ ${FILTER} | sort -k2,2" |
+    while read pid pname ; do
+      printf "%6s %-10s %-80s\n" $pid ${pname#???_pmon_} $(sudo ls -l /proc/$pid/exe | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//' | sort | uniq)
+    done
 }
 
 
@@ -723,65 +735,64 @@ function oragetversionpid {
 
 
 function oralistcnx {
-ps -eo "args" | grep L[O]CAL=NO | sort | uniq -c
+  ps -eo "args" | grep L[O]CAL=NO | sort | uniq -c
 }
 
 
 function lsnGetservice_OLD {
-LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | sed 's/.*lsnr \(.*\) -no.*/\1/')
-for LSN_NAME in ${LSN_NAME_LIST}; do
+  LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | sed 's/.*lsnr \(.*\) -no.*/\1/')
+  for LSN_NAME in ${LSN_NAME_LIST}; do
     cmd="lsnrctl status ${LSN_NAME} | grep -m 3 ${1}.*_APPLI"
     host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's/.*\(.*HOST=.*\)\(PORT=.*\)/Host=\1 Port=\2/')
     echo "${LSN_NAME} :"
     echo ${cmd}
     eval ${cmd}
     #eval ${cmd} | highlight cyan 'lsnrctl status'
-done
+  done
 }
 
 
 function lsnGetservice {
-FORMER_FUNCNAME=${FUNCNAME[0]:-$0}
-#echo "Usage : Connected as 'grid' ${FUNCNAME[0]:-$0} <TRI>.*X1"
-## TODO : sudo -u grid || ssh grid@localhost + oraenv +ASM
-    function Usage {
-    echo "Usage : ${FORMER_FUNCNAME} <DB_STRING>.*X1"
-    }
+  FORMER_FUNCNAME=${FUNCNAME[0]:-$0}
+  #echo "Usage : Connected as 'grid' ${FUNCNAME[0]:-$0} <TRI>.*X1"
+  ## TODO : sudo -u grid || ssh grid@localhost + oraenv +ASM
+  function Usage {
+  echo "Usage : ${FORMER_FUNCNAME} <DB_STRING>.*X1"
+  }
 
-[ -z "${1}" ] && Usage && read -p "List all listener services ? (return to continue) " ANSWER
-[ ! -z "${ANSWER}" ] && exit
+  [ -z "${1}" ] && Usage && read -p "List all listener services ? (return to continue) " ANSWER
+  [ ! -z "${ANSWER}" ] && exit
 
-    MainFunc () {
-    #echo "Usage : ${FORMER_FUNCNAME} <TRI>.*X1"
-    LSN_SERVICE=${1:-.}
-#    LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | sed 's/.*lsnr \(.*\) -no.*/\1/')
-    LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | awk '{print $2}')
-    for LSN_NAME in ${LSN_NAME_LIST}; do
-        #cmd="lsnrctl status ${LSN_NAME} | grep -m 3 ${LSN_SERVICE}.*_APPLI"
-        cmd="lsnrctl status ${LSN_NAME} | grep ${LSN_SERVICE}"
-        #host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's/.*\(.*HOST=.*\))(\(PORT=.*\))))/\1 \2/')
-        host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's:.*(\(.*HOST=.*\))(\(PORT=[0-9]*\)).*:\1 \2:')
-        echo -e "\e[7;40;37m${LSN_NAME}\e[0m : "${host_port}
-        #echo ${cmd}
-        #eval ${cmd}
-        RESULT="$(eval ${cmd})"
-        echo -e "\e[1;32m${RESULT}\e[0m"
-        #eval ${cmd} | highlight cyan 'lsnrctl status'
-    done
-    }
+  MainFunc () {
+  #echo "Usage : ${FORMER_FUNCNAME} <TRI>.*X1"
+  LSN_SERVICE=${1:-.}
+#  LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | sed 's/.*lsnr \(.*\) -no.*/\1/')
+  LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | awk '{print $2}')
+  for LSN_NAME in ${LSN_NAME_LIST}; do
+    #cmd="lsnrctl status ${LSN_NAME} | grep -m 3 ${LSN_SERVICE}.*_APPLI"
+    cmd="lsnrctl status ${LSN_NAME} | grep ${LSN_SERVICE}"
+    #host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's/.*\(.*HOST=.*\))(\(PORT=.*\))))/\1 \2/')
+    host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's:.*(\(.*HOST=.*\))(\(PORT=[0-9]*\)).*:\1 \2:')
+    echo -e "\e[7;40;37m${LSN_NAME}\e[0m : "${host_port}
+    #echo ${cmd}
+    #eval ${cmd}
+    RESULT="$(eval ${cmd})"
+    echo -e "\e[1;32m${RESULT}\e[0m"
+    #eval ${cmd} | highlight cyan 'lsnrctl status'
+  done
+  }
 
-    if [ "${LOGNAME}" == "grid" ]; then
-        if [[ ! "${ORACLE_SID}" =~ "ASM" ]]; then HOST=$(hostname -s); export ORACLE_SID="+ASM${HOST:0,-1}"; export ORAENV_ASK=NO; . oraenv>/dev/null; fi
-        MainFunc $1
-    else
-        #export -f MainFunc
-        #su grid -c "bash -c HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv>/dev/null; MainFunc $1"
-        #su grid -c "bash -c echo "HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv; echo ${ORACLE_SID}:${ORACLE_HOME}; MainFunc $1""
-#        sudo -i -u grid bash -c ". ${BI_PATH}/lib/fgenv &>/dev/null; export PATH=\$PATH:/usr/local/bin/; HOST=\$(hostname -s); export ORACLE_SID=+ASM\${HOST:0,-1}; export ORAENV_ASK=NO; . oraenv>/dev/null; lsnGetservice $1"
-        sudo -i -u grid bash -c ". ${BI_PATH}/lib/fgenv 2>\&1 >/dev/null; PATH=\${PATH}:${GI_BIN}; ORACLE_SID=+ASM; export ORACLE_HOME=${GI_BIN%/bin}; lsnGetservice $1"  ## FGR : 2025-01-09 : ORACLE_SID=+ASM is needed even if it is ot used (no need to export)
-        #sudo -u grid bash -c "MainFunc $1"
-        #su grid -c "bash -c MainFunc $1"
-    fi
+  if [ "${LOGNAME}" == "grid" ]; then
+    if [[ ! "${ORACLE_SID}" =~ "ASM" ]]; then HOST=$(hostname -s); export ORACLE_SID="+ASM${HOST:0,-1}"; export ORAENV_ASK=NO; . oraenv>/dev/null; fi
+    MainFunc $1
+  else
+    #export -f MainFunc
+    #su grid -c "bash -c HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv>/dev/null; MainFunc $1"
+    #su grid -c "bash -c echo "HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv; echo ${ORACLE_SID}:${ORACLE_HOME}; MainFunc $1""
+    sudo -i -u grid bash -c ". ${BI_PATH}/lib/fgenv &>/dev/null; export PATH=\$PATH:/usr/local/bin/; HOST=\$(hostname -s); export ORACLE_SID=+ASM\${HOST:0,-1}; export ORAENV_ASK=NO; . oraenv>/dev/null; lsnGetservice $1"
+    #sudo -u grid bash -c "MainFunc $1"
+    #su grid -c "bash -c MainFunc $1"
+  fi
 }
 
 
@@ -2096,6 +2107,9 @@ function PostCommand {
 # git config --global help.autocorrect 20
 
 
+## Force the below bloc to be commented out
+: <<'COMMENTED_OUT'
+
 ### COMMANDS : TODO
 ## oralistdbi, oralistdbn, oralistdbu : List all dbX running or from OCR
 ## Search in traces :
@@ -2194,3 +2208,6 @@ for dbuname in $(crsctl status res -w "( TYPE = ora.database.type ) && ( ORACLE_
 
 
 #### END : TODO #####
+
+COMMENTED_OUT
+## End of commented out bloc

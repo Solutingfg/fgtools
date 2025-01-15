@@ -80,7 +80,12 @@ LIBDIR=${WORKDIR}/lib
 #SCRIPT_DIR=${TOOLKIT_BIN:-/oracle/exploit}
 #[ -x /prsyslib/toolunix/bin ] && SCRIPT_DIR=/prsyslib/toolunix/bin
 #[ -x /oracle/exploit ] && SCRIPT_DIR=/oracle/exploit
-[ -z "${SCRIPT_DIR}" ] && SCRIPT_DIR=${TOOLKIT_BIN:-$(dirname $(which --skip-alias ora_functions.sh) 2>&1 >/dev/null)}
+#[ -z "${SCRIPT_DIR}" ] && SCRIPT_DIR=${TOOLKIT_BIN:-$(dirname $(which --skip-alias ora_functions.sh) 2>&1 >/dev/null)}
+## FGR 2025-01-15 : Lookup for BI Tools script directory if not previously set
+[ -z "${SCRIPT_DIR}" ] && SCRIPT_DIR=${TOOLKIT_BIN:-$(eval ls -d /prsyslib/toolunix/bin/ 2>/dev/null)}
+## FGR 2025-01-15 : Lookup for DBATools script directory
+[ -z "${SCRIPT_DIR}" ] && SCRIPT_DIR=$(eval ls -d /{apps,srv}/dbatools/prod/script/ 2>/dev/null)
+[ -z "${SCRIPT_LIST}" ] && [ -n "${SCRIPT_DIR}" ] && SCRIPT_LIST=$(cd ${SCRIPT_DIR}; eval ls -p ora_* vtom_* expl_* 2>/dev/null)
 
 
 ## DEBUG
@@ -1675,11 +1680,11 @@ export -f oenv
 
 _word_list_instance() {
 ## FGR 2023-11-06 : PGREG is Faster than PS
-#    [ -z "${word_list_instance}" ] && word_list_instance=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-10)
-    [ -z "${word_list_instance}" -o "${RELOAD}" = "TRUE" ] && word_list_instance=$(pgrep -a pmon | grep -v APX | cut -d'_' -f3- | cut -c1-10)
-#    [ -z "${word_list_dbname}" ] && word_list_dbname=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-8)
-#    [ -z "${word_list_dbname}" ] && word_list_dbname=$(pgrep -a pmon | grep -v APX | cut -d'_' -f3- | cut -c1-8)
-    word_list_bisudo=$(grep "^[^#|^$|^ *$]" ${SCRIPT_DIR}/ora/env/init.allow 2>/dev/null | cut -d' ' -f2 | uniq)
+#  [ -z "${word_list_instance}" ] && word_list_instance=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-10)
+  [ -z "${word_list_instance}" -o "${RELOAD}" = "TRUE" ] && word_list_instance=$(pgrep -a pmon | grep -v APX | cut -d'_' -f3- | cut -c1-10)
+#  [ -z "${word_list_dbname}" ] && word_list_dbname=$(ps -eo args | grep pm[o]n | grep -v APX | cut -d'_' -f3- | cut -c1-8)
+#  [ -z "${word_list_dbname}" ] && word_list_dbname=$(pgrep -a pmon | grep -v APX | cut -d'_' -f3- | cut -c1-8)
+  [ -f "${SCRIPT_DIR}/ora/env/init.allow" ] && word_list_bisudo=$(grep "^[^#|^$|^ *$]" ${SCRIPT_DIR}/ora/env/init.allow 2>/dev/null | cut -d' ' -f2 | uniq)
 }
 _word_list_instance
 
@@ -1691,7 +1696,7 @@ _ora_completion() {
     prev=${COMP_WORDS[COMP_CWORD-1]}
     ante=${COMP_WORDS[COMP_CWORD-2]}
     first=${COMP_WORDS[0]}
-    array_scripts=$(ls -p ${SCRIPT_DIR} | grep -v '/')
+    array_scripts=$(ls -p ${SCRIPT_DIR} | grep -E 'ora_|vtom_|expl_' | grep -v '/')
 #    array_scripts=$(grep "^[^#|^$|^ *$]" ${SCRIPT_DIR}/ora/env/init.allow | cut -d' ' -f2 | uniq -u)
 #    array_scripts_args=( "${array_scripts[@]//ora_shell.sh}" )
 

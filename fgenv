@@ -80,7 +80,7 @@ LIBDIR=${WORKDIR}/lib
 #SCRIPT_DIR=${TOOLKIT_BIN:-/oracle/exploit}
 #[ -x /prsyslib/toolunix/bin ] && SCRIPT_DIR=/prsyslib/toolunix/bin
 #[ -x /oracle/exploit ] && SCRIPT_DIR=/oracle/exploit
-[ -z "${SCRIPT_DIR}" ] && SCRIPT_DIR=${TOOLKIT_BIN:-$(dirname $(which --skip-alias ora_functions.sh &>/dev/null) &>/dev/null)}
+[ -z "${SCRIPT_DIR}" ] && SCRIPT_DIR=${TOOLKIT_BIN:-$(dirname $(which --skip-alias ora_functions.sh) 2>&1 >/dev/null)}
 
 
 ## DEBUG
@@ -109,7 +109,7 @@ if [ $(hostname | grep -E "dbadm|biexa|bizra") ]; then
   [ $(hostname | grep "biexa") ]          && WELCOME_MSG="Plateform : EXADATA Converged (CNVG)" && PLATFORM_TYPE=EXA_CNVG
   [ $(hostname | grep "bizra") ]          && WELCOME_MSG="Plateform : ZDLRA Converged (CNVG)"   && PLATFORM_TYPE=ZDLRA_CNVG
   [ $(hostname | grep -E "ora[0-9]{4}") ] && WELCOME_MSG="Plateform : EXADATA (NX)"             && PLATFORM_TYPE=EXA_NX
-  alias fgenv &>/dev/null || alias fgenv=". ${LIBDIR}/fgenv"
+  alias fgenv 2>&1 >/dev/null || alias fgenv=". ${LIBDIR}/fgenv"
   HN=$(hostname -s)
   HN_BASE=${HN%?}
   HN_NUM=${HN#${HN%?}}
@@ -245,7 +245,7 @@ ORA_VERSION=$(echo "${ORACLE_HOME}" | sed -E "s:.*/([0-9]*)\.([0-9]*)\.([0-9]*)\
 #[ -n "${X_SCLS}" ] && SCL_FLAG=$(echo -e " \e[1;35mscl:${X_SCLS}\e[0m") || unset SCL_FLAG
 [ -n "${X_SCLS}" ] && SCL_FLAG=$(echo -e " \e${SCL_FLAG_COLOR}scl:${X_SCLS}\e${CNC}") || unset SCL_FLAG
 ## Date flag
-#DATE_PS1='[$(date "+%a %m/%d %H:%M:%S")]' ## FG : Decommenter pour avoir la date dans le prompt 
+#DATE_PS1='[$(date "+%a %m/%d %H:%M:%S")]' ## FG : Decommenter pour avoir la date dans le prompt
 
 
 # ------------------------------------------------------------------------------
@@ -263,7 +263,7 @@ ORA_VERSION=$(echo "${ORACLE_HOME}" | sed -E "s:.*/([0-9]*)\.([0-9]*)\.([0-9]*)\
   # USER # HN_COLORED=$(echo $(hostname -s) | sed -E "s:([a-z]{2})([dbp])([a-z]{3})([a-z]{5})([0-9]{3})([0-9]):\x1b$CWB\1\x1b$CRB\U\2\E\x1b$CW\3\x1b$CWB\4\x1b$CCB\5\x1b$CWB\6\x1b$CNC:g;t")
 #export PS1='\e${USR_COLOR}\u\e[0m@\e${SRV_COLOR}${HN_BASE}\e${SRV_NUM_COLOR}${HN_NUM}\e[0m:\e${PATH_COLOR}m\w\e[0m \e${INST_COLOR}${ORACLE_SID} \e${VER_COLOR}$(eval echo ${ORA_VERSION})\e[0m${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\e${SH_MARK_COLOR}m\$\e[0m '
 #export PS1='\e${CGB}\u\e${CNC}@${HN_COLORED}:\e${CWB}\w\e${CNC} \e${CGB}${APPLIANCE_NAME}\e${CNC}-\e${CRB}${HN_NUM}\e${CNC} \e${CRB}${ORACLE_SID} \e${CYB}$(eval echo ${ORA_VERSION})\e${CNC}${SCREEN_FLAG}${TMUX_FLAG}${SCL_FLAG}\n$(eval echo ${DATE_PS1})\e${CGB}\$\e${CNC} '
-export PS1='\e${USR_COLOR}\u\e${CNC}@${HN_COLORED}:\e${PATH_COLOR}\w\e${CNC} \e${SRV_ENV_COLOR}${APPLIANCE_NAME}\e${CNC}-\e${SRV_NUM_COLOR}${HN_NUM}\e${CNC} \e${INST_COLOR}${ORACLE_SID} \e${VER_COLOR}$(eval echo ${ORA_VERSION})\e${SCR_FLAG_COLOR}${SCREEN_FLAG}${TMUX_FLAG}\e${SCR_FLAG_COLOR}${SCL_FLAG}\e${CNC}\n$(eval echo ${DATE_PS1})\e${SH_MARK_COLOR}\$\e${CNC} '
+#export PS1='\e${USR_COLOR}\u\e${CNC}@${HN_COLORED}:\e${PATH_COLOR}\w\e${CNC} \e${SRV_ENV_COLOR}${APPLIANCE_NAME}\e${CNC}-\e${SRV_NUM_COLOR}${HN_NUM}\e${CNC} \e${INST_COLOR}${ORACLE_SID} \e${VER_COLOR}$(eval echo ${ORA_VERSION})\e${SCR_FLAG_COLOR}${SCREEN_FLAG}${TMUX_FLAG}\e${SCR_FLAG_COLOR}${SCL_FLAG}\e${CNC}\n$(eval echo ${DATE_PS1})\e${SH_MARK_COLOR}\$\e${CNC} '
 ## FGR : Need the open square bracket \[ and close square bracket \] to avoid screen prompt break
 export PS1='\[\e${USR_COLOR}\]\u\[\e${CNC}\]@${HN_COLORED}:\[\e${PATH_COLOR}\]\w\[\e${CNC}\] \[\e${SRV_ENV_COLOR}\]${APPLIANCE_NAME}\[\e${CNC}\]-\[\e${SRV_NUM_COLOR}\]${HN_NUM}\[\e${CNC}\] \[\e${INST_COLOR}\]${ORACLE_SID} \[\e${VER_COLOR}\]$(eval echo ${ORA_VERSION})\[\e${SCR_FLAG_COLOR}\]${SCREEN_FLAG}${TMUX_FLAG}\[\e${SCR_FLAG_COLOR}\]${SCL_FLAG}\[\e${CNC}\]\n$(eval echo ${DATE_PS1})\[\e${SH_MARK_COLOR}\]\$\[\e${CNC}\] '
 
@@ -789,7 +789,7 @@ function lsnGetservice {
     #export -f MainFunc
     #su grid -c "bash -c HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv>/dev/null; MainFunc $1"
     #su grid -c "bash -c echo "HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv; echo ${ORACLE_SID}:${ORACLE_HOME}; MainFunc $1""
-    sudo -i -u grid bash -c ". ${BI_PATH}/lib/fgenv &>/dev/null; export PATH=\$PATH:/usr/local/bin/; HOST=\$(hostname -s); export ORACLE_SID=+ASM\${HOST:0,-1}; export ORAENV_ASK=NO; . oraenv>/dev/null; lsnGetservice $1"
+    sudo -i -u grid bash -c ". ${BI_PATH}/lib/fgenv 2>&1 >/dev/null; export PATH=\$PATH:/usr/local/bin/; HOST=\$(hostname -s); export ORACLE_SID=+ASM\${HOST:0,-1}; export ORAENV_ASK=NO; . oraenv>/dev/null; lsnGetservice $1"
     #sudo -u grid bash -c "MainFunc $1"
     #su grid -c "bash -c MainFunc $1"
   fi
@@ -868,17 +868,17 @@ function set_oracle_wallet {
 
 function oracle_wallet_infra {
     local REP_WALLET_INFRA
-    #hostname | grep prdres &>/dev/null && ENV=PRD
-    #hostname | grep intres &>/dev/null && ENV=HPR
+    #hostname | grep prdres 2>&1 >/dev/null && ENV=PRD
+    #hostname | grep intres 2>&1 >/dev/null && ENV=HPR
     [ "${ENV}" = "HPR" ] && local WALLET_PASSWD=${WALLET_PASSWD:-$(echo "aUZLVVcjSCQhdWhBdHVYCg==" | base64 -d)}
     [ "${ENV}" = "PRD" ] && local WALLET_PASSWD=${WALLET_PASSWD:-$(echo "YXZTU2kjPWRhbUVzUWZHCg==" | base64 -d)}
     # FGR : #orapki wallet change_pwd -wallet ${REP_WALLET_INFRA} -oldpwd '<old_passwd>' -newpwd '<new_passwd>'
-    if $(which --skip-alias mkstore &>/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
+    if $(which --skip-alias mkstore 2>&1 >/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
     REP_WALLET_INFRA="${TOOLKIT_DIR:-/prsyslib/toolunix/bin}/ora/wallet_infra"
     export TNS_ADMIN=${REP_WALLET_INFRA}
     echo "TNS_ADMIN=${TNS_ADMIN}"
     [ -z "${WALLET_PASSWD}" ] && read -p "Enter Wallet Password : " -s WALLET_PASSWD
-    if ! $(echo "${WALLET_PASSWD}" | mkstore -wrl ${REP_WALLET_INFRA} -listCredential &>/dev/null) ; then echo 'Wrong Wallet password' ; fi
+    if ! $(echo "${WALLET_PASSWD}" | mkstore -wrl ${REP_WALLET_INFRA} -listCredential 2>&1 >/dev/null) ; then echo 'Wrong Wallet password' ; fi
     action=${1:-PRINT}
 
     NBR_ENTRIES=$(echo "${WALLET_PASSWD}" | mkstore -wrl ${REP_WALLET_INFRA} -listCredential | grep -c [0-9]:)
@@ -941,8 +941,8 @@ function oracle_wallet_db {
     #export TNS_ADMIN=${WALLET_PATH}
     #echo "TNS_ADMIN=${TNS_ADMIN}"
 
-    #if $(which --skip-alias mkstore &>/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
-    if ! $(which --skip-alias mkstore &>/dev/null); then 
+    #if $(which --skip-alias mkstore 2>&1 >/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
+    if ! $(which --skip-alias mkstore 2>&1 >/dev/null); then 
         echo "mkstore binary not is the path ... Searching ..."
         #if MKSTORE_BIN_PATH=$(dirname `locate -be '\mkstore' | grep grid | tail -1`); 
         #if MKSTORE_BIN_PATH=$(dirname `locate -be '\mkstore' | grep grid | tail -1`); then echo "MKSTORE_BIN_PATH=${MKSTORE_BIN_PATH}"; PATH=${PATH}:${MKSTORE_BIN_PATH}; else echo "! mkstore not found !"; return 0; fi
@@ -956,7 +956,7 @@ function oracle_wallet_db {
     #    echo "MKSTORE_BIN_PATH=${MKSTORE_BIN_PATH}"
     fi
 
-    #if ! $(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} -listCredential &>/dev/null) ; then echo 'Wrong Wallet password' ; fi
+    #if ! $(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} -listCredential 2>&1 >/dev/null) ; then echo 'Wrong Wallet password' ; fi
     #if [ $(echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} ${WLT_DFT_ARGS} -list | grep -c 'incorrect password') -ne 0 ] ; then echo 'Wrong Wallet password' ; return 1; fi
 
     # orapki wallet display -wallet ${WALLET_PATH:-.}
@@ -1087,7 +1087,7 @@ function dbtconf {
 
 
 function oracle_wallet_dbatools {
-[ -n "${DBG}" ] && set -x
+[ -n "${DBG}" ] && set -x || set +x
     local PATH=${PATH}
     local WALLET_PATH
     local WALLET_PASSWD=${WALLET_PASSWD:-$(echo "Vk9QbkQ1SG00N3RXd0pUamU4awo=" | base64 -d)}
@@ -1102,8 +1102,8 @@ function oracle_wallet_dbatools {
         )
     echo 
 
-    #if $(which --skip-alias mkstore &>/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
-    if $(which --skip-alias mkstore &>/dev/null); then 
+    #if $(which --skip-alias mkstore 2>&1 >/dev/null); then echo "ORACLE_HOME=${ORACLE_HOME}"; else echo "ORACLE_HOME not set"; return 0; fi
+    if $(which --skip-alias mkstore 2>&1 >/dev/null); then 
         echo "ORACLE_HOME=${ORACLE_HOME}"
     else 
         echo "ORACLE_HOME not set"
@@ -1264,7 +1264,7 @@ alias nmon14g=${BINDIR}/nmon14g_x86_rhel7
 #alias screen='screen -h 50000'
 ## FGR 2022-02-04 : Force the use of the custom screen in case other screen rpm is installed
 #alias screen='${BI_PATH}/bin/screen -h 50000'
-if ! $(which --skip-alias screen &>/dev/null); then alias screen='${BI_PATH}/bin/screen -h 50000' else alias screen='screen -h 50000'; fi
+if ! $(which --skip-alias screen 2>&1 >/dev/null); then alias screen='${BI_PATH}/bin/screen -h 50000' else alias screen='screen -h 50000'; fi
 alias sc='screen -h 50000'
 alias scls='screen -ls'
 #alias scls='screen -ls | \grep "${1}"'
@@ -1917,35 +1917,34 @@ function BCTPostCommand {
 PROMPT_COMMAND='BCTPostCommand'
 ## END - BASH TIMER
 
+
 ## Print a clock
 function prompt_command {
-let prompt_x=$COLUMNS-6
-PROMPT_COMMAND=prompt_command
+  let prompt_x=$COLUMNS-6
+  PROMPT_COMMAND=prompt_command
 }
 
 function print_clock {
-local       BLUE="\[\033[0;34m\]"
-local        RED="\[\033[0;31m\]"
-local  LIGHT_RED="\[\033[1;31m\]"
-local      WHITE="\[\033[1;37m\]"
-local  NO_COLOUR="\[\033[0m\]"
-case $TERM in
-    xterm*)
-        TITLEBAR='\[\033]0;\u@\h:\w\007\]'
-        ;;
-    *)
-        TITLEBAR=""
-        ;;
-esac
+[ -n "${DBG}" ] && set -x || set +x
+  local       BLUE="\[\033[0;34m\]"
+  local        RED="\[\033[0;31m\]"
+  local  LIGHT_RED="\[\033[1;31m\]"
+  local      WHITE="\[\033[1;37m\]"
+  local  NO_COLOUR="\[\033[0m\]"
+  case $TERM in
+    xterm*) TITLEBAR='\[\033]0;\u@\h:\w\007\]' ;;
+    *) TITLEBAR="" ;;
+  esac
 
-PS1_CURRENT=${PS1}
-PS1="${TITLEBAR}\
+  PS1_CURRENT=${PS1}
+  PS1="${TITLEBAR}\
 \[\033[s\033[1;\$(echo -n \${prompt_x})H\]\
 $BLUE[$LIGHT_RED\$(date +%Hh%M)$BLUE]\
 \[\033[u\033[1A\]\
 ${PS1_CURRENT}"
 #$BLUE[$LIGHT_RED\u@\h:\w$BLUE]\
 #$WHITE\$$NO_COLOUR "
+[ -n "${DBG}" ] && set +x
 }
 ## END - Print a clock
 
@@ -1972,6 +1971,7 @@ function highlight {
 }
 #export -f highlight
 
+
 alias listdbprmy='dbinfo | grep Open | grep $(hostname -s) | cut -d'.' -f2 | tr "[:lower:]" "[:upper:]"'
 # CUT --complement
 #LIST_INSTANCE=GCETSTX01,GCETSTX02,GCETSTX03
@@ -1987,15 +1987,15 @@ function ORA_CNX_TEST {
 ## Check Instances connection
 # All instances
 pgrep -af _pmon_ | grep -v '+A' | sort -k2 | awk -F'_' '{ print $NF }' | \
- xargs -P10 -Idbsid sh -c '. oraenv<<<dbsid &>/dev/null ; echo "${ORACLE_SID} $(printf "%-18s" `echo "${ORACLE_HOME}" | sed -E "s:.*/([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*).*:\(\1.\2.\3.\4.\5\):"`;) `TEST_DB_CNX_OUT=$(echo -e "WHENEVER SQLERROR EXIT SQL.SQLCODE;\nconnect / as sysdba" | sqlplus -S -L /nolog) && echo "RC=$? : CNX OK" || echo "RC=$? : CNX KO : $(echo -n ${TEST_DB_CNX_OUT})"`"' | grep --color -Ei '^|CNX KO|ERROR|ORA-.*'
-# xargs -P10 -Idbsid sh -c '. oraenv<<<dbsid &>/dev/null ; printf "%10s %18s => %-6s %s %s %s %s %s %s %s %s %s %s\n" ${ORACLE_SID} `echo "${ORACLE_HOME}" | sed -E "s:.*/([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*).*:\(\1.\2.\3.\4.\5\):"` `TEST_DB_CNX_OUT=$(echo -e "WHENEVER SQLERROR EXIT SQL.SQLCODE;\nconnect / as sysdba" | sqlplus -S -L /nolog) && echo "RC=$? : CNX OK" || echo "RC=$? : CNX KO : $(echo -n ${TEST_DB_CNX_OUT})"`' | grep --color -Ei '^|CNX KO|ERROR|ORA-.*' 
-# xargs -P10 -Idbsid sh -c '. oraenv<<<dbsid &>/dev/null ; echo ${ORACLE_SID} \(`echo "${ORACLE_HOME}" | sed -E "s:.*/([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*).*:\1.\2.\3.\4.\5:"`\) : `echo -e "WHENEVER SQLERROR EXIT SQL.SQLCODE;\nselect * from dual;" | sqlplus -s / as sysdba &>/dev/null; [ "$?" = "0"  ] && echo "RC=$? : CNX OK" || echo "RC=$? : CNX KO"`' | grep --color -Ei '^|CNX KO'
+ xargs -P10 -Idbsid sh -c '. oraenv<<<dbsid 2>&1 >/dev/null ; echo "${ORACLE_SID} $(printf "%-18s" `echo "${ORACLE_HOME}" | sed -E "s:.*/([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*).*:\(\1.\2.\3.\4.\5\):"`;) `TEST_DB_CNX_OUT=$(echo -e "WHENEVER SQLERROR EXIT SQL.SQLCODE;\nconnect / as sysdba" | sqlplus -S -L /nolog) && echo "RC=$? : CNX OK" || echo "RC=$? : CNX KO : $(echo -n ${TEST_DB_CNX_OUT})"`"' | grep --color -Ei '^|CNX KO|ERROR|ORA-.*'
+# xargs -P10 -Idbsid sh -c '. oraenv<<<dbsid 2>&1 >/dev/null ; printf "%10s %18s => %-6s %s %s %s %s %s %s %s %s %s %s\n" ${ORACLE_SID} `echo "${ORACLE_HOME}" | sed -E "s:.*/([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*).*:\(\1.\2.\3.\4.\5\):"` `TEST_DB_CNX_OUT=$(echo -e "WHENEVER SQLERROR EXIT SQL.SQLCODE;\nconnect / as sysdba" | sqlplus -S -L /nolog) && echo "RC=$? : CNX OK" || echo "RC=$? : CNX KO : $(echo -n ${TEST_DB_CNX_OUT})"`' | grep --color -Ei '^|CNX KO|ERROR|ORA-.*' 
+# xargs -P10 -Idbsid sh -c '. oraenv<<<dbsid 2>&1 >/dev/null ; echo ${ORACLE_SID} \(`echo "${ORACLE_HOME}" | sed -E "s:.*/([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*).*:\1.\2.\3.\4.\5:"`\) : `echo -e "WHENEVER SQLERROR EXIT SQL.SQLCODE;\nselect * from dual;" | sqlplus -s / as sysdba 2>&1 >/dev/null; [ "$?" = "0"  ] && echo "RC=$? : CNX OK" || echo "RC=$? : CNX KO"`' | grep --color -Ei '^|CNX KO'
 
 
 # Per version
 #ORA_VER=19.22
 #pgrep -af _pmon_ | grep -v '+A' | sort -k2 | while read pid pname ; do echo ${pname#???_pmon_} $(sudo ls -l /proc/$pid/exe | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//'); done | grep "${ORA_VER:-|NA|}" | awk '{print $1}' | \
-# xargs -P10 -Idbsid sh -c '. oraenv<<<dbsid &>/dev/null ; echo "${ORACLE_SID} $(printf "%-18s" `echo "${ORACLE_HOME}" | sed -E "s:.*/([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*).*:\(\1.\2.\3.\4.\5\):"`;) `TEST_DB_CNX_OUT=$(echo -e "WHENEVER SQLERROR EXIT SQL.SQLCODE;\nconnect / as sysdba" | sqlplus -S -L /nolog) && echo "RC=$? : CNX OK" || echo "RC=$? : CNX KO : $(echo -n ${TEST_DB_CNX_OUT})"`"' | grep --color -Ei '^|CNX KO|ERROR|ORA-.*'
+# xargs -P10 -Idbsid sh -c '. oraenv<<<dbsid 2>&1 >/dev/null ; echo "${ORACLE_SID} $(printf "%-18s" `echo "${ORACLE_HOME}" | sed -E "s:.*/([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*)\.([0-9]*).*:\(\1.\2.\3.\4.\5\):"`;) `TEST_DB_CNX_OUT=$(echo -e "WHENEVER SQLERROR EXIT SQL.SQLCODE;\nconnect / as sysdba" | sqlplus -S -L /nolog) && echo "RC=$? : CNX OK" || echo "RC=$? : CNX KO : $(echo -n ${TEST_DB_CNX_OUT})"`"' | grep --color -Ei '^|CNX KO|ERROR|ORA-.*'
 }
 
 

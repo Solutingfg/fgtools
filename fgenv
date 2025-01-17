@@ -758,46 +758,70 @@ function lsnGetservice_OLD {
 
 
 function lsnGetservice {
+  [ "$DBG" == "2" ] && set -x
   FORMER_FUNCNAME=${FUNCNAME[0]:-$0}
-  #echo "Usage : Connected as 'grid' ${FUNCNAME[0]:-$0} <TRI>.*X1"
-  ## TODO : sudo -u grid || ssh grid@localhost + oraenv +ASM
+  local DBG=${2:-${DBG}}  ## FGR : 2025-01-10 : DBG var must transfered as the function is self-called
+  local ORACLE_HOME=${ORACLE_HOME}  ## FGR : 2025-01-17 : Input the current ORACLE_HOME but don't modify it outside the function
+
+  ## Set the GI env if not already done
+  [ -z "${GI_HOME}" ] && { GI_HOME=$(awk -F: '/^+ASM/ {print $2}' /etc/oratab); [ -n "$DBG" ] && echo "Set GI_HOME from oratab : GI_HOME=${GI_HOME}" ;}
+  [ -n "${GI_HOME}" -a -x "${GI_HOME}/bin/oracle" ] || { GI_HOME=$(dirname $(ps -eo args | grep [o]cssd.bin) | awk '{print substr( $1, 1, length($1)-4)}'); [ -n "$DBG" ] && echo "Set GI_HOME from process : GI_HOME=${GI_HOME}" ;}
+  local GI_OWNER=$(find ${GI_HOME}/bin/oracle -prune -printf '%u')
+
   function Usage {
-  echo "Usage : ${FORMER_FUNCNAME} <DB_STRING>.*X1"
+    echo "Usage : ${FORMER_FUNCNAME} <DB_STRING>.*X1"
   }
 
   [ -z "${1}" ] && Usage && read -p "List all listener services ? (return to continue) " ANSWER
   [ ! -z "${ANSWER}" ] && exit
 
   MainFunc () {
-  #echo "Usage : ${FORMER_FUNCNAME} <TRI>.*X1"
+    [ -n "$DBG" ] && echo GI_HOME=${GI_HOME}
+    [ -n "$DBG" ] && echo GI_BIN=${GI_BIN}
+    [ -n "$DBG" ] && echo "(BEFORE) ORACLE_HOME=${ORACLE_HOME}"
+#    [ -z "${ORACLE_HOME}" ] && { export ORACLE_HOME=${GI_BIN%/bin}; [ -n "$DBG" ] && echo "ORACLE_HOME absent, setting OH to ${GI_BIN%/bin}"; }
+    [ "${ORACLE_HOME}" != "${GI_HOME}" ] && { export ORACLE_HOME=${GI_HOME}; [ -n "$DBG" ] && echo "ORACLE_HOME absent or incorrect, set OH to GI_HOME (${GI_HOME})"; } || { [ -n "$DBG" ] && echo "ORACLE_HOME already set to GI_HOME (${GI_HOME})"; }
+    [ -n "$DBG" ] && echo "(AFTER) ORACLE_HOME=${ORACLE_HOME}"
+    #echo "Usage : ${FORMER_FUNCNAME} <TRI>.*X1"
   LSN_SERVICE=${1:-.}
-#  LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | sed 's/.*lsnr \(.*\) -no.*/\1/')
-  LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | awk '{print $2}')
-  for LSN_NAME in ${LSN_NAME_LIST}; do
-    #cmd="lsnrctl status ${LSN_NAME} | grep -m 3 ${LSN_SERVICE}.*_APPLI"
-    cmd="lsnrctl status ${LSN_NAME} | grep ${LSN_SERVICE}"
-    #host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's/.*\(.*HOST=.*\))(\(PORT=.*\))))/\1 \2/')
-    host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's:.*(\(.*HOST=.*\))(\(PORT=[0-9]*\)).*:\1 \2:')
-    echo -e "\e[7;40;37m${LSN_NAME}\e[0m : "${host_port}
-    #echo ${cmd}
-    #eval ${cmd}
-    RESULT="$(eval ${cmd})"
-    echo -e "\e[1;32m${RESULT}\e[0m"
-    #eval ${cmd} | highlight cyan 'lsnrctl status'
-  done
+#    LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | sed 's/.*lsnr \(.*\) -no.*/\1/')
+    LSN_NAME_LIST=$(ps -eo args | grep -w tnsl[s]nr | awk '{print $2}')
+    for LSN_NAME in ${LSN_NAME_LIST}; do
+      #cmd="lsnrctl status ${LSN_NAME} | grep -m 3 ${LSN_SERVICE}.*_APPLI"
+      cmd="${GI_HOME}/bin/lsnrctl status ${LSN_NAME} | grep ${LSN_SERVICE}"
+      #host_port=$(lsnrctl status ${LSN_NAME} | grep PORT | sed 's/.*\(.*HOST=.*\))(\(PORT=.*\))))/\1 \2/')
+      host_port=$(${GI_HOME}/bin/lsnrctl status ${LSN_NAME} | grep PORT | sed 's:.*(\(.*HOST=.*\))(\(PORT=[0-9]*\)).*:\1 \2:')
+      echo -e "\e[7;40;37m${LSN_NAME}\e[0m : "${host_port}
+      #[ -n "$DBG" ] && echo "EXEC : $(eval echo ${cmd})"
+      #eval ${cmd}
+      RESULT="$(eval ${cmd})"
+      echo -e "\e[1;32m${RESULT}\e[0m"
+      #eval ${cmd} | highlight cyan 'lsnrctl status'
+    done
   }
 
-  if [ "${LOGNAME}" == "grid" ]; then
-    if [[ ! "${ORACLE_SID}" =~ "ASM" ]]; then HOST=$(hostname -s); export ORACLE_SID="+ASM${HOST:0,-1}"; export ORAENV_ASK=NO; . oraenv>/dev/null; fi
-    MainFunc $1
+  ## FGR : 2025-01-10 : Make sure to execute the command using the GI bin owner
+  if [ "${LOGNAME}" == "${GI_OWNER}" ]; then
+    [ -n "$DBG" ] && echo "LOGNAME:${LOGNAME} == GI_OWNER:${GI_OWNER} (find ${GI_HOME}/bin/oracle -prune -printf '%u')"
+    ## FGR : 2025-01-09 : oratab become deprecated and in the case +ASM* entry does not exist, the below command will break the ORACLE_HOME
+    #if [[ ! "${ORACLE_SID}" =~ "ASM" ]]; then HOST=$(hostname -s); export ORACLE_SID="+ASM${HOST:0,-1}"; export ORAENV_ASK=NO; . oraenv>/dev/null; fi
+    cmd="MainFunc $1 $DBG"
+    [ -n "$DBG" ] && echo "EXEC : $(eval echo ${cmd})"
+    eval ${cmd}
   else
+    [ -n "$DBG" ] && echo "LOGNAME:${LOGNAME} <> GI_OWNER:${GI_OWNER} (find ${GI_HOME}/bin/oracle -prune -printf '%u')"
     #export -f MainFunc
-    #su grid -c "bash -c HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv>/dev/null; MainFunc $1"
-    #su grid -c "bash -c echo "HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv; echo ${ORACLE_SID}:${ORACLE_HOME}; MainFunc $1""
-    sudo -i -u grid bash -c ". ${BI_PATH}/lib/fgenv >/dev/null 2>&1; export PATH=\$PATH:/usr/local/bin/; HOST=\$(hostname -s); export ORACLE_SID=+ASM\${HOST:0,-1}; export ORAENV_ASK=NO; . oraenv>/dev/null; lsnGetservice $1"
     #sudo -u grid bash -c "MainFunc $1"
     #su grid -c "bash -c MainFunc $1"
+    #su grid -c "bash -c HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv>/dev/null; MainFunc $1"
+    #su grid -c "bash -c echo "HOST=$(hostname -s); export ORACLE_SID=+ASM${HOST:0,-1}; export ORAENV_ASK=NO; export PATH=${PATH}:/usr/local/bin/; . oraenv; echo ${ORACLE_SID}:${ORACLE_HOME}; MainFunc $1""
+    #sudo -i -u grid bash -c ". ${BI_PATH}/lib/fgenv >/dev/null 2>&1; export PATH=\$PATH:/usr/local/bin/; HOST=\$(hostname -s); export ORACLE_SID=+ASM\${HOST:0,-1}; export ORAENV_ASK=NO; . oraenv>/dev/null; lsnGetservice $1"
+    #sudo -i -u ${GI_OWNER} bash -c ". ${BI_PATH}/lib/fgenv >/dev/null 2>\&1; export PATH=\${PATH}:${GI_HOME/bin}; export ORACLE_HOME=${GI_HOME}; lsnGetservice $1 $DBG"
+    sudo_cmd='sudo -i -u ${GI_OWNER} bash -c ". ${BI_PATH}/lib/fgenv >/dev/null 2>\&1; lsnGetservice $1 $DBG"'
+    [ -n "$DBG" ] && echo "EXEC : $(eval echo ${sudo_cmd})"
+    eval "${sudo_cmd}"
   fi
+  [ "$DBG" == "2" ] && set +x || true  ## FGR : 2025-01-10 : Because this is the last command, if FALSE it will print the "BASH COMMAND TIMER" in RED
 }
 
 

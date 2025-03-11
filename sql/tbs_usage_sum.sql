@@ -24,25 +24,25 @@ column  largest     format 999,999  heading "Largest_MB"
 --compute sum of used on report
 --compute sum of MaxSize on report
 select
-    sum(Mbytes_alloc/1024/1024)         Tbytes
-,   sum(Mbytes_alloc-nvl(Mbytes_free,0))/1024/1024  used_TB
-,   sum(nvl(Mbytes_free,0))/1024/1024       free_TB
-,   sum(Mbytes_alloc/1024)              Gbytes
-,   sum(Mbytes_alloc-nvl(Mbytes_free,0))/1024       used_GB
-,   sum(nvl(Mbytes_free,0))/1024            free_GB
-,   sum(Mbytes_alloc)                   Mbytes
-,   sum(Mbytes_alloc-nvl(Mbytes_free,0))    used
-,   sum(nvl(Mbytes_free,0))                 free
-from (select sum(bytes)/1048576 Mbytes_free
-        ,   max(bytes)/1048576 largest
-        ,   tablespace_name
-        from dba_free_space
-        group by tablespace_name) a
-    ,   (select sum(bytes)/1048576  Mbytes_alloc
-    ,    sum(MAXBYTES)/1048576      MaxSize
-    ,    tablespace_name
-    from dba_data_files
-    group by    tablespace_name)            b
+  sum(Mbytes_alloc/1024/1024)                     Tbytes
+, sum(Mbytes_alloc-nvl(Mbytes_free,0))/1024/1024  used_TB
+, sum(nvl(Mbytes_free,0))/1024/1024               free_TB
+, sum(Mbytes_alloc/1024)                          Gbytes
+, sum(Mbytes_alloc-nvl(Mbytes_free,0))/1024       used_GB
+, sum(nvl(Mbytes_free,0))/1024                    free_GB
+, sum(Mbytes_alloc)                               Mbytes
+, sum(Mbytes_alloc-nvl(Mbytes_free,0))            used
+, sum(nvl(Mbytes_free,0))                         free
+from (select sum(bytes)/1048576  Mbytes_free
+      , max(bytes)/1048576  largest
+      , tablespace_name
+      from dba_free_space
+      group by tablespace_name)  a
+      ,(select sum(bytes)/1048576  Mbytes_alloc
+        , sum(MAXBYTES)/1048576    MaxSize
+        , tablespace_name
+        from dba_data_files
+        group by tablespace_name)  b
 where a.tablespace_name (+) = b.tablespace_name
 order by 2 desc,1
 /

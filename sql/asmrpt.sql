@@ -2,7 +2,7 @@
 set lines 250
 set pages 50
 col dgname form a15
-col dbname form a13
+col dbname form a15
 col file_type form a16
 
 break   on report
@@ -23,7 +23,7 @@ SELECT
     ,DGTYPE REDUNDANCY
     ,CASE DGTYPE WHEN 'HIGH' THEN round(SUM(space)/1024/1024/3) WHEN 'NORMAL' THEN round(SUM(space)/1024/1024/2) WHEN 'EXTERN' THEN round(SUM(space)/1024/1024) END used_mb
     ,CASE DGTYPE WHEN 'HIGH' THEN round(SUM(space)/1024/1024/1024/3) WHEN 'NORMAL' THEN round(SUM(space)/1024/1024/1024/2) WHEN 'EXTERN' THEN round(SUM(space)/1024/1024/1024) END used_gb
-    ,CASE DGTYPE WHEN 'HIGH' THEN round(SUM(space)/1024/1024/1024/1024/2) WHEN 'NORMAL' THEN round(SUM(space)/1024/1024/1024/1024/2) WHEN 'EXTERN' THEN round(SUM(space)/1024/1024/1024/1024) END used_tb
+    ,CASE DGTYPE WHEN 'HIGH' THEN round(SUM(space)/1024/1024/1024/1024/3) WHEN 'NORMAL' THEN round(SUM(space)/1024/1024/1024/1024/2) WHEN 'EXTERN' THEN round(SUM(space)/1024/1024/1024/1024) END used_tb
     ,COUNT(*) "#FILES"
     ,round(SUM(space)/1024/1024) raw_mb
     ,round(SUM(space)/1024/1024/1024) raw_gb
@@ -92,7 +92,9 @@ WHERE
     dbname like '&&db_name'
 --AND dgname='DATAC1'
 --AND file_type not in ('DATAFILE')
+--AND file_type in ('TEMPFILE')
 --AND file_type in ('ARCHIVELOG')
+--AND file_type <> 'DATAFILE'
 GROUP BY
     dgname,
     dbname,

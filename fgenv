@@ -18,7 +18,7 @@
 
 ## WORKAROUND TO DEFAULT ENV
 # Unset the Default Shell disconnection Timeout
-[ -n "${TMOUT}" ] && echo -e TMOUT=${TMOUT} unsetting TMOUT; unset TMOUT
+[ -n "${TMOUT}" ] && echo -e TMOUT=${TMOUT} unsetting TMOUT; unset TMOUT || { echo "TMOUT is ReadOnly: executing 'exec env TMOUT=0 bash'"; exec env TMOUT=0 bash; }
 
 
 ## Execution mode of "fgenv"
@@ -1291,7 +1291,7 @@ alias psg="ps aux | grep -v grep | grep -i"
 alias vim='vim -u ${LIBDIR}/.vimrc'
 alias vi=vim
 #[ ! -d '/usr/share/vim/vim74' ] && export VIMRUNTIME=${LIBDIR}/share/vim/vim74
-[ ! $(ls -d /usr/share/vi/vim[0-9]* 2>/dev/null) ] && { [ -z "${SILENT}" ] && echo "NoVIMruntimes : export VIMRUNTIME=${LIBDIR}/share/vim/vim74"; export VIMRUNTIME=${LIBDIR}/share/vim/vim74; }
+[ ! $(ls -d /usr/share/vi[m]/vim[0-9]* 2>/dev/null) ] && { [ -z "${SILENT}" ] && echo "NoVIMruntimes : export VIMRUNTIME=${LIBDIR}/share/vim/vim74"; export VIMRUNTIME=${LIBDIR}/share/vim/vim74; }
 alias ssh='ssh -o ServerAliveInterval=30'
 alias netbreakdown="netstat -nat | awk '{print $6}' | sort | uniq -c | sort -n"
 
@@ -1409,8 +1409,10 @@ du -sk ${filter} | sort -n | awk '
 }
 
 function ts {
-[ -n "$1" ] && filter="$*" || filter="*"
-du -sk ${filter} | sort -n | awk '
+#[ -n "$1" ] && filter="$*" || filter=".[^.]* *"; ## FGR : Former
+[ -n "$1" ] && filter="$*" || filter=".[!.]* *"  ## FGR 2025-02-17 : ".[!.]*" to include hidden folders and files
+## FGR 2025-02-17 : 2>/dev/null to avoid "du: cannot access '.[!.]*': No such file or directory" when no hidden folder exist
+du -sk ${filter} 2>/dev/null | sort -n | awk '
     BEGIN {
       split("KB,MB,GB,TB,PB,EB,ZB,YB", Units, ",");
     }
@@ -1479,6 +1481,9 @@ adGetgroupInfo () {
 
 
 nfsgetacl() { nfs4_getfacl "$@" | grep -Ev "OWNER|GROUP|EVERYONE"; };
+## NFS ACL : nfs4_setfacl -a A:fd:<uid>:RWX <path>
+## FS ACL : setfacl -m u:<user>:rwx <path>
+
 
 
 ## Locate Enhancement
@@ -1823,7 +1828,7 @@ _example_complete()
 complete -F _example_complete oraup
 
 
-## BASH TIMER
+## BASH COMMAND TIMER
 # https://github.com/jichu4n/bash-command-timer
 BCT_ENABLE=1
 BCT_SUCCESS_COLOR='32'
@@ -1959,7 +1964,7 @@ function BCTPostCommand {
   echo -e "${output_str_colored}"
 }
 PROMPT_COMMAND='BCTPostCommand'
-## END - BASH TIMER
+## END - BASH COMMAND TIMER
 
 
 ## Print a clock
@@ -2150,9 +2155,24 @@ function PostCommand {
 # git config --global alias.se '!git rev-list --all | xargs git grep -F'
 # git config --global help.autocorrect 20
 
+#### END : FG : TODO #####
 
-## Force the below bloc to be commented out
+
+
+
+## Force the below bloc to be commented out (for safety reason)
 : <<'COMMENTED_OUT'
+
+#### FG : TIPS ####
+
+## crash script : To test
+# :( ){ :|:& };:
+
+
+## Mass Change Password (passwd)
+#read -s -p "Enter PASSWORD : " PASSWORD
+#dcli -g ~/dbs_dbnodes -l root "echo ${PASSWORD} | passwd --stdin <user>"
+
 
 ### COMMANDS : TODO
 ## oralistdbi, oralistdbn, oralistdbu : List all dbX running or from OCR
@@ -2169,6 +2189,29 @@ function PostCommand {
 #/ - end of the search regex, and start of the substitute string.
 #\1 - reference to that string we found in the brackets above.
 #/ end of the substitute string.
+
+## Force Nohup
+nohup -p pid
+## OR
+kill -SIGSTOP PID
+disown %1 
+kill -SIGCONT PID
+
+## Rsync Options
+rsync -ahv -z --compress-level=3 --info=progress2 /dir user@server:/data/TARGET_DIR
+
+## Find all Java version
+find /srv -type f -name java -exec sh -c 'echo "{} : $({} -version 2>&1 | grep Runtime)"' \; | grep -v OPatch
+
+## Check flow / open ports
+TARGET_SRV=${server_fqdn} ; for port in 1521 1525 1522 1523 1529 1530 10198 10195 10098 10095 ; do echo "Target: ${TARGET_SRV} Port: ${port} => Output: " $(nc -w0.1 -vz ${TARGET_SRV} $port 2>&1 | grep -Ev 'Version|Connection refused|seconds'); done
+
+## LOOPDB examples
+ENVSQL="SELECT * FROM (SELECT TO_CHAR(action_time,'YYYY-MM-DD HH24:MI:SS') action_time,status,description FROM sys.dba_registry_sqlpatch where upper(description) like '%DATABASE%RELEASE%' ORDER by action_time desc,description desc) WHERE ROWNUM=1;" ; loopdb ENVSQL --open --ver 19 | highlight green '19.24.0.0.240716' | highlight green 'SUCCESS' | grep --color -Ei '^|WITH ERRORS|19\.[1-2][0-2]'
+
+## EZCONNECT with parameter (Oracle Net Easy Connect Plus)
+# https://download.oracle.com/ocomdocs/global/Oracle-Net-Easy-Connect-Plus.pdf
+sqlplus user/passwd@server:port/service"?connect_timeout=2&retry_count=5&retry_delay=3&transport_connect_timeout=30"
 
 
 ## SAR
@@ -2250,8 +2293,23 @@ for dbuname in $(crsctl status res -w "(TYPE = ora.database.type) && (ORACLE_HOM
 #Etat des lieux détaillé des services APPLI Oracle pour les bases 19c :
 for dbuname in $(crsctl status res -w "( TYPE = ora.database.type ) && ( ORACLE_HOME coi 19.1 )" -p -attr NAME | sed -e '/^$/d' -e 's/^NAME=ora.\(.*\).db/\1 /'); do eval "crsctl stat res ora.${dbuname}.${dbuname:0:8}_appli.svc | awk -v dbu=${dbuname} -v svc=${dbuname:0:8}_appli.svc -F= '/^STATE=/ { print dbu\" \"svc\" \"\$2\" \"\$3}'"; done;
 
+#### Deploy FGRENV
+FGENV_BASE_DIR=/data/BIS46/tech/FGR/FGRENV/
+FGENV_BI_DIR=${FGENV_BASE_DIR}/opt/<bi>
+## bienv.sh (profile launcher)
+dcli -g ~/dbs_group -l root 'ls -l /etc/profile.d/bienv.sh'
+dcli -g ~/dbs_group -l root -f ${FGENV_BASE_DIR}/etc/profile.d/bienv.sh -d /etc/profile.d/bienv.sh
 
-#### END : TODO #####
+## BI scripts collection
+dcli -g ~/dbs_group -l root 'cp -rp ${FGENV_BI_DIR} /opt/'
+
+## fgenv script from Base dir
+dcli -l root -g ~/dbs_group -f ${FGENV_BI_DIR}/lib/fgenv -d /opt/<bi>/lib/fgenv
+
+## fgenv : Update one file only
+dcli -l root -g ~/dbs_group -f /opt/<bi>/lib/fgenv -d /opt/<bi>/lib/fgenv
+
+#### END : TIPS ####
 
 COMMENTED_OUT
 ## End of commented out bloc

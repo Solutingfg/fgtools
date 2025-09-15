@@ -1686,24 +1686,25 @@ function ethlink {
 
 
 function EXA_TEST_FLUX {
+unset EXA_FLOW_TO_TEST EXA_FLOW_CNVG_HPR EXA_FLOW_CNVG_BCH EXA_FLOW_CNVG_PRD
   if [ ! -z "${1}" ] ; then
-    EXA_CNVG_TO_TEST="${1}"
-    unset EXA_CNVG_HPR EXA_CNVG_BCH EXA_CNVG_PRD
+    EXA_FLOW_TO_TEST="${1}"
   else
-    EXA_CNVG_HPR="## ANONYMIZED BI ##" ; ENDPOINT_PORT=10198
-    EXA_CNVG_BCH="## ANONYMIZED BI ##" ; ENDPOINT_PORT=10198
-    EXA_CNVG_PRD="## ANONYMIZED BI ##" ; ENDPOINT_PORT=10098
+    EXA_FLOW_CNVG_HPR="## ANONYMIZED BI ##" ; ENDPOINT_PORT=10198
+    EXA_FLOW_CNVG_BCH="## ANONYMIZED BI ##" ; ENDPOINT_PORT=10198
+    EXA_FLOW_CNVG_PRD="## ANONYMIZED BI ##" ; ENDPOINT_PORT=10098
   fi
   
   #unset EXA_LIST
-  for EXA_LIST in $(set | grep '^EXA_CNVG_' | cut -d= -f1); do 
+  for EXA_LIST in $(set | grep '^EXA_FLOW_' | cut -d= -f1); do 
     echo "${EXA_LIST}=${!EXA_LIST}"
     for EXA_LIST_ITEM in $(echo "${!EXA_LIST}"); do
-      [[ $(echo "${EXA_LIST_ITEM}" | cut -c3) =~ ['p'] ]] && { ENDPOINT_SCAN_PORT=10098 ; ENDPOINT_VIP_PORT=10095 ; } || { ENDPOINT_SCAN_PORT=10198 ; ENDPOINT_VIP_PORT=10195 ; }
+      [[ $(echo "${EXA_LIST_ITEM}") =~ 'fr.intranet' ]] && SED_FILTER='s:(^c)(.*)(.-scan):s\2$i-vip:g' && [[ $(echo "${EXA_LIST_ITEM}" | cut -c3) =~ ['p'] ]] && { ENDPOINT_SCAN_PORT=10098 ; ENDPOINT_VIP_PORT=10095 ; } || { ENDPOINT_SCAN_PORT=10198 ; ENDPOINT_VIP_PORT=10195 ; }
+      [[ $(echo "${EXA_LIST_ITEM}") =~ 'dom101' ]] && { ENDPOINT_SCAN_PORT=1525 ; ENDPOINT_VIP_PORT=1525 ; SED_FILTER='s:(.*)(-scan.):\1\db0$i-vip:g' ; }
       echo -e "\n#### Testing flows for SCAN on port '${ENDPOINT_SCAN_PORT}' : ${EXA_LIST_ITEM}"
-      for endpoint_scan in $(nslookup ${EXA_LIST_ITEM} | awk '/Address: [0-9]/{print $2}'); do echo "=> Testing : ${endpoint_scan}:${ENDPOINT_SCAN_PORT}" ; nc -vzw1 ${endpoint_scan} ${ENDPOINT_SCAN_PORT} 2>&1   ; done
-      echo -e "\n#### Testing flows for VIP '${ENDPOINT_VIP_PORT}' : $(echo "${EXA_LIST_ITEM}" | sed -E 's:(^c)(.*)(.-scan):s\2\[1-4]-vip:g')"
-      for endpoint_vip in $(echo "${EXA_LIST_ITEM}" | sed -E 's:(^c)(.*)(.-scan):s\2\$i-vip:g') ; do for i in {1..4} ; do echo "=> Testing : $(eval echo $endpoint_vip):${ENDPOINT_VIP_PORT}"; nc -vzw1 $(eval echo $endpoint_vip) ${ENDPOINT_VIP_PORT} 2>&1 | grep -vE 'Version|bytes'; done ; done
+      for endpoint_scan in $(nslookup ${EXA_LIST_ITEM} | awk '/Address: [0-9]/{print $2}'); do echo "=> Testing : ${endpoint_scan}:${ENDPOINT_SCAN_PORT}" ; nc -vzw1 ${endpoint_scan} ${ENDPOINT_SCAN_PORT} 2>&1 | grep -vE 'Version|bytes' ; done
+      echo -e "\n#### Testing flows for VIP '${ENDPOINT_VIP_PORT}' : $(i='[1-4]'; eval echo $(echo "${EXA_LIST_ITEM}" | sed -E ${SED_FILTER}) )"
+      for endpoint_vip in $(echo "${EXA_LIST_ITEM}" | sed -E ${SED_FILTER}) ; do for i in {1..4} ; do echo "=> Testing : $(eval echo ${endpoint_vip}):${ENDPOINT_VIP_PORT} [$(eval host ${endpoint_vip} | awk '{print $NF}')]"; nc -vzw1 $(eval echo $endpoint_vip) ${ENDPOINT_VIP_PORT} 2>&1 | grep -vE 'Version|bytes'; done ; done
     done
   done
   

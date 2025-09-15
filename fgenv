@@ -1686,14 +1686,31 @@ function ethlink {
 
 
 function EXA_TEST_FLUX {
+  if [ ! -z "${1}" ] ; then
+    EXA_CNVG_TO_TEST="${1}"
+    unset EXA_CNVG_HPR EXA_CNVG_BCH EXA_CNVG_PRD
+  else
     EXA_CNVG_HPR="## ANONYMIZED BI ##" ; ENDPOINT_PORT=10198
     EXA_CNVG_BCH="## ANONYMIZED BI ##" ; ENDPOINT_PORT=10198
     EXA_CNVG_PRD="## ANONYMIZED BI ##" ; ENDPOINT_PORT=10098
-
-    for EXA_LIST in $(set | grep EXA_CNVG_ | cut -d= -f1); do 
-        echo "${EXA_LIST}=${!EXA_LIST}"
-        for endpoint in ${!EXA_LIST}; do echo "${endpoint}:${ENDPOINT_PORT} :" ; nc -vzw1 ${endpoint} ${ENDPOINT_PORT} 2>&1 | grep -v 'Version' ; done
+  fi
+  
+  #unset EXA_LIST
+  for EXA_LIST in $(set | grep '^EXA_CNVG_' | cut -d= -f1); do 
+    echo "${EXA_LIST}=${!EXA_LIST}"
+    for EXA_LIST_ITEM in $(echo "${!EXA_LIST}"); do
+      [[ $(echo "${EXA_LIST_ITEM}" | cut -c3) =~ ['p'] ]] && { ENDPOINT_SCAN_PORT=10098 ; ENDPOINT_VIP_PORT=10095 ; } || { ENDPOINT_SCAN_PORT=10198 ; ENDPOINT_VIP_PORT=10195 ; }
+      echo -e "\n#### Testing flows for SCAN on port '${ENDPOINT_SCAN_PORT}' : ${EXA_LIST_ITEM}"
+      for endpoint_scan in $(nslookup ${EXA_LIST_ITEM} | awk '/Address: [0-9]/{print $2}'); do echo "=> Testing : ${endpoint_scan}:${ENDPOINT_SCAN_PORT}" ; nc -vzw1 ${endpoint_scan} ${ENDPOINT_SCAN_PORT} 2>&1   ; done
+      echo -e "\n#### Testing flows for VIP '${ENDPOINT_VIP_PORT}' : $(echo "${EXA_LIST_ITEM}" | sed -E 's:(^c)(.*)(.-scan):s\2\[1-4]-vip:g')"
+      for endpoint_vip in $(echo "${EXA_LIST_ITEM}" | sed -E 's:(^c)(.*)(.-scan):s\2\$i-vip:g') ; do for i in {1..4} ; do echo "=> Testing : $(eval echo $endpoint_vip):${ENDPOINT_VIP_PORT}"; nc -vzw1 $(eval echo $endpoint_vip) ${ENDPOINT_VIP_PORT} 2>&1 | grep -vE 'Version|bytes'; done ; done
     done
+  done
+  
+  echo
+  echo "Understanding the output :"
+  echo "If Ncat result is 'Connected' or 'Connection refused' the flow is OPEN"
+  echo "If Ncat result is 'TIMEOUT' the flow is CLOSE"
 }
 
 

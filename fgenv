@@ -328,7 +328,10 @@ function display_all_colors_16 {
 
 
 ## BI Specific
-## ANONYMIZED BI ##
+if [ -z "${SILENT}" ]; then
+  echo -e "${WELCOME_MSG}"
+  ## ANONYMIZED BI ##
+fi
 
 
 ## Functions (Needed for below code)
@@ -951,6 +954,8 @@ function oracle_wallet_infra {
     done
 }
 
+# read -s WALLET_PASSWD
+# echo "${WALLET_PASSWD}" | mkstore -wrl ${WALLET_PATH:-.} ${WLT_DFT_ARGS} -viewEntry oracle.security.client.default_password | grep =
 function oracle_wallet_db {
 [ -n "${DBG}" ] && set -x || set +x
     local DBUNAME
@@ -2057,6 +2062,13 @@ EOF
 echo SQL=$SQL
 }
 
+mount_point_of() {
+  f=$(readlink -m -- "$1") &&
+    until mountpoint -q -- "$f"; do
+      f=${f%/*}; f=${f:-/}
+    done &&
+    printf '%s\n' "$f"
+}
 
 function SendMail {
 	STATUS=$1

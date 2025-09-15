@@ -354,19 +354,34 @@ function pathremove {
 
 
 ## ORACLE Environment
+function GI_SetEnv {
+## Set : GI_HOME, GI_BIN, GI_OWNER
+
+  ## Retrieve the GI path from ocssd.bin process
+  #GI_HOME=$(dirname $(ps -eo args | grep [o]cssd.bin) | awk '{print substr( $1, 1, length($1)-4)}')
+  #GI_BIN=$(dirname $(ps -eo args | grep [o]cssd.bin | awk '{print $1}' ))
+
+  ## FGR : To speedup GI_HOME lookup : use of oratab first then search the path from the process ocssd.bin
+  [ -z "${GI_HOME}" ] && { GI_HOME=$(awk -F: '/^+ASM/ {print $2}' /etc/oratab); [ -n "$DBG" ] && echo "Set GI_HOME from oratab : GI_HOME=${GI_HOME}" ;}
+  [ -n "${GI_HOME}" -a -x "${GI_HOME}/bin/oracle" ] || { GI_HOME=$(dirname $(ps -eo args | grep [o]cssd.bin) | awk '{print substr( $1, 1, length($1)-4)}'); [ -n "$DBG" ] && echo "Set GI_HOME from process : GI_HOME=${GI_HOME}" ;}
+  GI_BIN=${GI_HOME}/bin
+
+  ## Retrieve the GI bin owner from ${GI_HOME}/bin/oracle file
+  GI_OWNER=$(find ${GI_HOME}/bin/oracle -prune -printf '%u')
+  #export PATH=${PATH}:${GI_BIN}
+  #[ "${LOGNAME}" == "${GI_OWNER}" ] && pathmunge ${GI_BIN} after || pathremove ${GI_BIN}
+
+  ## Move GI binaries path if exist to the end of PATH to make sure we use the RDBMS path
+  pathremove ${GI_BIN}
+  pathmunge ${GI_BIN} after
+}
+
+
 if [ "${LOGNAME}" == "oracle" -o "${LOGNAME}" == "grid" ]
 then
-    ## FGR : To speedup GI_HOME lookup : use of oratab first then search the path from the process ocssd.bin
-    GI_HOME=$(awk -F: '/+ASM/ {print $2}' /etc/oratab)
-    [ -n "${GI_HOME}" -a -d "${GI_HOME}/bin" ] || GI_HOME=$(dirname $(ps -eo args | grep [o]cssd.bin) | awk '{print substr( $1, 1, length($1)-4)}')
-    #GI_HOME=$(dirname $(ps -eo args | grep [o]cssd.bin) | awk '{print substr( $1, 1, length($1)-4)}')
-    #GI_BIN=$(dirname $(ps -eo args | grep [o]cssd.bin | awk '{print $1}' ))
-    GI_BIN=${GI_HOME}/bin
-    #export PATH=${PATH}:${GI_BIN}
-    #[ "${LOGNAME}" == "grid" ] && pathmunge ${GI_BIN} after || pathremove ${GI_BIN}
-    ## Move GRID path if exist to the end of PATH to make sure we use the RDBMS path
-    pathremove ${GI_BIN}
-    pathmunge ${GI_BIN} after
+    GI_SetEnv
+    ## FGR 2025-01-15 : Get ORACLE_BASE
+    #[ -z "${ORACLE_BASE}" -a -n "${ORACLE_HOME}" ] && ORA_BASE=$(${ORACLE_HOME}/bin/orabase)
     #.oracle_profile
     #export PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;37m\]\w\[\033[00m\] \n\[\033[1;31m\]$ORACLE_SID\[\033[00m\][$(date "+%a %m/%d %H:%M:%S")]\$ '
     #export NLS_LANG=AMERICAN_AMERICA.WE8MSWIN1252
